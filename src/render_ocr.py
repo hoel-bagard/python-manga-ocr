@@ -1,10 +1,10 @@
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from src.my_types import OCRData
 
 
-def render_detected(img: np.ndarray, ocr_data: OCRData):
+def render_detected(img: np.ndarray, ocr_data: OCRData) -> np.ndarray:
     """Render the characters detected by Tesseract on the given image.
 
     Args:
@@ -17,6 +17,7 @@ def render_detected(img: np.ndarray, ocr_data: OCRData):
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = Image.fromarray(img)
     draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype("data/NotoSansJP-Regular.otf", 20)
 
     # left: list[int]
     # top: list[int]
@@ -27,7 +28,8 @@ def render_detected(img: np.ndarray, ocr_data: OCRData):
     useful_values = zip(ocr_data["text"], ocr_data["left"], ocr_data["top"], ocr_data["width"], ocr_data["height"])
     for char, left, top, width, height in useful_values:
         # TODO: clean the bbox.
-        draw.text((left, top), char, fill=1)#, font=font, stroke_width=0)
+        # draw.text((left, top), char, fill=1, font=font, stroke_width=0)
+        draw.rectangle((left, top, left+width, top+height), fill=None, outline=None, width=1)
 
     # Back to opencv
     img = np.asarray(img)
