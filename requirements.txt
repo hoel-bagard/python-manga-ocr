@@ -1,5 +1,4 @@
 opencv-python
 numpy
 pytesseract
-thefuzz
-python-Levenshtein
+Pillow
