@@ -126,7 +126,7 @@ def process_tile(img: np.ndarray, logger: logging.Logger, display_images: bool):
     #     12 Sparse text with OSD.
     # From my limited testing, 12 is more accurate, but does not separate lines (5 does).
     # For the lang, use either "jpn+jpn_vert" or "jpn_vert".
-    ocr_data: OCRData = pytesseract.image_to_data(img, config="--psm 12", lang="jpn_vert",
+    ocr_data: OCRData = pytesseract.image_to_data(img, config="--psm 12", lang="jpn+jpn_vert",
                                                   output_type=pytesseract.Output.DICT)
     logger.debug(f"Frame processed by Tesseract. Raw output:\n{ocr_data}")
 
@@ -167,6 +167,7 @@ def main():
     stride_width, stride_height = 75, 150
     logger.debug(f"Image {height=} {width=}, {tile_width=}, {tile_height=} and {stride_width=}, {stride_height=} ")
 
+    process_tile(img, logger, display_images)
     # Build tiles. End is at width and not width-tile_width to be sure to cover the whole image (same for the height).
     for x in range(0, width, stride_width):
         for y in range(0, height, stride_height):
@@ -176,6 +177,7 @@ def main():
             process_tile(tile, logger, display_images)
 
     # TODO: Merge results
+    # Give "large" tiles to tesseract, but keep only the results where at least one corner is whithin a smaller interior tile.
 
     logger.info("Finished processing the image.")
 
