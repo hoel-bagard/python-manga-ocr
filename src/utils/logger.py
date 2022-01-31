@@ -57,7 +57,6 @@ def create_logger(name: str,
     assert log_dir is not None or stdout, "You need to use at least one of log_dir or stdout"
 
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
 
     if log_dir is not None:
         log_dir.mkdir(parents=True, exist_ok=True)
