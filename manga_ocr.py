@@ -150,11 +150,14 @@ def main():
 
     text_bounding_boxes = get_text_bboxes(img, logger)
     # text_bounding_boxes = [(706, 204, 164, 242), (697, 1625, 135, 231)]
-    padding = 50  # The bouding boxing are pretty tight, add a padding aroung it.
+    padding = 50
     for left, top, width, height in text_bounding_boxes:
         logger.debug(f"Processing area with width {width} and height {height}")
+        # The bouding boxing are pretty tight, add a padding aroung it.
+        # Tesseract website: "if you OCR just text area without any border, Tesseract could have problems with it."
         padded_crop = cv2.copyMakeBorder(img[top:top+height, left:left+width],
                                          padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=255)
+        # TODO: Try adding erosion.
         detected_text = process_area(padded_crop, logger, display_images)
         if detected_text is not None:
             logger.debug(f"Detected text: {detected_text}")
