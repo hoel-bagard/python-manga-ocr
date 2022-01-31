@@ -41,8 +41,19 @@ def draw_bounding_boxes(img: np.ndarray,
 
 
 def components_to_bboxes(connected_components: list[tuple[slice, slice]]) -> list[tuple[int, int, int, int]]:
-    # ocr_data["left"], ocr_data["top"], ocr_data["width"], ocr_data["height"]))
-    pass
+    """Converts components (slices) to bounding boxes (tuples).
+
+    Args:
+        connected_components: A list of components (a component is a tuple of slices)
+
+    Returns:
+        A list of 4 ints tuples (top left, top, width, height)
+    """
+    bboxes = []
+    for component in connected_components:
+        ys, xs = component
+        bboxes.append((xs.start, ys.start, xs.stop-xs.start, ys.stop-ys.start))
+    return bboxes
 
 
 def get_connected_components(img: np.ndarray) -> list[tuple[slice, slice]]:

@@ -7,7 +7,12 @@ import cv2
 import numpy as np
 import scipy.ndimage
 
-from src.utils.connected_components import form_mask, get_cc_average_size, get_connected_components
+from src.utils.connected_components import (
+    components_to_bboxes,
+    form_mask,
+    get_cc_average_size,
+    get_connected_components
+)
 from src.utils.logger import create_logger
 from src.utils.misc import show_img
 from src.utils.rlsa import rlsa
@@ -70,20 +75,41 @@ def detect_lines(img: np.ndarray,
     return lines
 
 
-def cleaned2segmented(cleaned: np.ndarray, average_size: float, logger: logging.Logger):
+def cleaned_to_text_mask(cleaned_img: np.ndarray,
+                         average_size: float,
+                         logger: logging.Logger,
+                         display_images: bool = False) -> np.ndarray:
+    """Takes in a cleaned image and returns a mask of the (likely) text boxes.
+
+    - First apply RLSA to the image to connect the letters / objects.
+    - Then get the connected components (since the letters have been linked,
+      connected component corresponds to a block of text).
+    - Finally, filter out components that don't look like text (text is expected to be composed of lines/blocks of text)
+
+    Args:
+        cleaned_img: The image to process. It should be a black and white image that has already been
+                     preprocessed so that most of the background / noise has been removed.
+        average_size: The average size of the component (i.e. object blocks) on the image.
+        logger: Logger use to print things.
+        display_images: If True, some images might get displayed.
+
+    Returns:
+        An mask with the same shape as the input image. (white where text is, black elsewhere)
+        The mask is composed of rectangles, each rectangle corresponding to a text zone.
+    """
     vsv = 0.75*average_size  # Note: the 0.75 used to be in the config
     hsv = 0.75*average_size
-    height, width = cleaned.shape[:2]
+    height, width = cleaned_img.shape[:2]
     logger.debug(f"Applying run length smoothing with vertical threshold {vsv:.2f} and horizontal threshold {hsv:.2f}")
 
-    rlsa_result = rlsa(cleaned, hsv, vsv)
+    rlsa_result = rlsa(cleaned_img, hsv, vsv)
     components = get_connected_components(cv2.bitwise_not(rlsa_result))
 
     text = np.zeros((height, width), np.uint8)
     for component in components:
         seg_thresh = 1
-        h_lines = detect_lines(cv2.bitwise_not(cleaned), component[1], component[0], seg_thresh)
-        v_lines = detect_lines(cv2.bitwise_not(cleaned).T, component[0], component[1], seg_thresh)
+        h_lines = detect_lines(cv2.bitwise_not(cleaned_img), component[1], component[0], seg_thresh)
+        v_lines = detect_lines(cv2.bitwise_not(cleaned_img).T, component[0], component[1], seg_thresh)
 
         # Filter out components that are composed of one block of black.
         # These are often drawings that got through the previous steps.
@@ -93,20 +119,36 @@ def cleaned2segmented(cleaned: np.ndarray, average_size: float, logger: logging.
         # TODO: Wouldn't it be possible to just use the slice to set the values to 255 ?
         cv2.rectangle(text, (component[1].start, component[0].start), (component[1].stop, component[0].stop), 255, -1)
 
-    if logger.getEffectiveLevel() == logging.DEBUG:
-        components_img = cleaned.copy()
+    if logger.getEffectiveLevel() == logging.DEBUG and display_images:
+        components_img = cleaned_img.copy()
         [cv2.rectangle(components_img, (c[1].start, c[0].start), (c[1].stop, c[0].stop), 127, 4) for c in components]
-        show_img(cv2.hconcat([cleaned, rlsa_result, components_img, text]), "Input, RLSA result, components and text")
+        show_img(cv2.hconcat([cleaned_img, rlsa_result, components_img, text]),
+                 "Input, RLSA result, components and text")
 
     return text
 
 
 def get_text_bboxes(img: np.ndarray,
                     logger: logging.Logger,
+                    min_scale: float = 0.15,
                     max_scale: float = 4.,
-                    min_scale: float = 0.15):
+                    display_images: bool = False) -> list[tuple[int, int, int, int]]:
+    """Return the bounding boxes corresponding to the blocks of text on the image.
+
+    # TODO: try to augment min_scale
+
+    Args:
+        img: The image to process.
+        logger: A logger, mostly used to print debug information (also shows images in debug mode).
+        max_scale: Used to filter out components.
+        min_scale: Used to filter out components.
+        display_images: If True, some images might get displayed.
+
+    Returns:
+        A list of tuples. Each tuple has 4 ints forming a bounding box: (top left, top, width, height).
+    """
     height, width = img.shape[:2]
-    logger.info(f"Segmenting {height}x{width} image.")
+    logger.debug(f"Processing {height}x{width} image, looking for text bounding boxes.")
 
     # Create gaussian filtered and unfiltered binary images
     binary_threshold = 190
@@ -138,16 +180,14 @@ def get_text_bboxes(img: np.ndarray,
 
     # Create a mask based on the connected components's non zero values, filtered by size
     mask = form_mask(gaussian_binary, max_size, min_size)
-
     # Secondary mask is formed from the convex hulls around the canny edges (masked by the previous mask)
     canny_mask = get_canny_hulls_mask(gaussian_filtered, mask=mask)
-
     # Final mask is size filtered connected components on canny mask
     final_mask = form_mask(canny_mask, max_size, min_size)
 
     # Apply mask and return images
     cleaned = cv2.bitwise_not(final_mask * binary)
-    text_only = cleaned2segmented(cleaned, average_size, logger)
+    text_only = cleaned_to_text_mask(cleaned, average_size, logger, display_images)
 
     # TODO: That was actually used.
     # If desired, suppress furigana characters (which interfere with OCR)
@@ -167,7 +207,7 @@ def get_text_bboxes(img: np.ndarray,
     # text_only = np.zeros(img.shape)
     # text_only = draw_bounding_boxes(text_only, text_like_areas, color=(255), line_size=-1)
 
-    if logger.getEffectiveLevel() == logging.DEBUG:
+    if logger.getEffectiveLevel() == logging.DEBUG and display_images:
         debug_img = np.zeros((height, width, 3), np.uint8)
         debug_img[:, :, 0] = img
         debug_img[:, :, 1] = text_only
@@ -175,7 +215,7 @@ def get_text_bboxes(img: np.ndarray,
         show_img(debug_img)
 
     final_components = get_connected_components(text_only)
-    return text_only
+    return components_to_bboxes(final_components)
 
 
 def main():
@@ -190,10 +230,11 @@ def main():
     logger = create_logger("Manga cleaner", verbose_level=verbose_level)
 
     img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
-    # show_img(img)
 
-    result_img = segment_image(img, logger)
-    show_img(result_img)
+    bboxes = get_text_bboxes(img, logger)
+    for left, top, width, height in bboxes:
+        cv2.rectangle(img, (left, top), (left+width, top+height), 127, 3)
+    show_img(img)
 
 
 if __name__ == "__main__":
