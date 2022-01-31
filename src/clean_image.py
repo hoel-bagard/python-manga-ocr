@@ -7,10 +7,10 @@ import cv2
 import numpy as np
 import scipy.ndimage
 
-from src.utils.connected_components import get_cc_average_size, get_connected_components, form_mask
-from src.utils.rlsa import rlsa
+from src.utils.connected_components import form_mask, get_cc_average_size, get_connected_components
 from src.utils.logger import create_logger
 from src.utils.misc import show_img
+from src.utils.rlsa import rlsa
 
 
 def get_canny_hulls_mask(img: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
@@ -101,42 +101,10 @@ def cleaned2segmented(cleaned: np.ndarray, average_size: float, logger: logging.
     return text
 
 
-# def filter_text_like_areas(img, segmentation, average_size):
-#   #see if a given rectangular area (2d slice) is very text like
-#   #First step is to estimate furigana like elements so they can be masked
-#   furigana_areas = furigana.estimate_furigana(img, segmentation)
-#   furigana_mask = np.array(furigana_areas==0,'B')
-
-#   #binarize the image, clean it via the segmentation and remove furigana too
-#   binary_threshold = arg.integer_value('binary_threshold',default_value=defaults.BINARY_THRESHOLD)
-#   if arg.boolean_value('verbose'):
-#     print('binarizing images with threshold value of ' + str(binary_threshold))
-#   binary = clean.binarize(img,threshold=binary_threshold)
-
-#   binary_average_size = cc.average_size(binary)
-#   if arg.boolean_value('verbose'):
-#     print('average cc size for binaryized grayscale image is ' + str(binary_average_size))
-#   segmentation_mask = np.array(segmentation!=0,'B')
-#   cleaned = binary * segmentation_mask * furigana_mask
-#   inv_cleaned = cv2.bitwise_not(cleaned)
-
-#   areas = cc.get_connected_components(segmentation)
-#   text_like_areas = []
-#   nontext_like_areas = []
-#   for area in areas:
-#     #if area_is_text_like(cleaned, area, average_size):
-#     if text_like_histogram(cleaned, area, average_size):
-#       text_like_areas.append(area)
-#     else:
-#       nontext_like_areas.append(area)
-
-#   return (text_like_areas, nontext_like_areas)
-
-
-def segment_image(img: np.ndarray,
-                  logger: logging.Logger,
-                  max_scale: float = 4.,
-                  min_scale: float = 0.15):
+def get_text_bboxes(img: np.ndarray,
+                    logger: logging.Logger,
+                    max_scale: float = 4.,
+                    min_scale: float = 0.15):
     height, width = img.shape[:2]
     logger.info(f"Segmenting {height}x{width} image.")
 
@@ -181,6 +149,7 @@ def segment_image(img: np.ndarray,
     cleaned = cv2.bitwise_not(final_mask * binary)
     text_only = cleaned2segmented(cleaned, average_size, logger)
 
+    # TODO: That was actually used.
     # If desired, suppress furigana characters (which interfere with OCR)
     # suppress_furigana = arg.boolean_value('furigana')
     # if suppress_furigana:
@@ -191,41 +160,22 @@ def segment_image(img: np.ndarray,
     #     cleaned = cv2.bitwise_not(cleaned)
     #     text_only = cleaned2segmented(cleaned, average_size)
 
-    # TODO: comment below might not be relevant. Careful
-#     # we've now broken up the original bounding box into possible vertical and horizontal lines.
-#     # We now wish to:
-#     # 1) Determine if the original bounding box contains text running V or H
-#     # 2) Eliminate all bounding boxes (don't return them in our output lists) that
-#     #    we can't explicitly say have some "regularity" in their line width/heights
-#     # 3) Eliminate all bounding boxes that can't be divided into v/h lines at all(???)
-#     # also we will give possible vertical text runs preference as they're more common
-    (text_like_areas, nontext_like_areas) = filter_text_like_areas(img, segmentation=text_only,
-                                                                   average_size=average_size)
-    logger.debug(f"{len(text_like_areas)} potential textl areas have been detected in total.")
-    text_only = np.zeros(img.shape)
-    cc.draw_bounding_boxes(text_only, text_like_areas,color=(255),line_size=-1)
+    # TODO: That was actually used.
+    # (text_like_areas, nontext_like_areas) = filter_text_like_areas(img, segmentation=text_only,
+    #                                                                average_size=average_size)
+    # logger.debug(f"{len(text_like_areas)} potential textl areas have been detected in total.")
+    # text_only = np.zeros(img.shape)
+    # text_only = draw_bounding_boxes(text_only, text_like_areas, color=(255), line_size=-1)
 
-    # if arg.boolean_value('debug'):
-    #     text_only = 0.5*text_only + 0.5*img
-    #     # text_rows = 0.5*text_rows+0.5*gray
-    #     # text_colums = 0.5*text_columns+0.5*gray
+    if logger.getEffectiveLevel() == logging.DEBUG:
+        debug_img = np.zeros((height, width, 3), np.uint8)
+        debug_img[:, :, 0] = img
+        debug_img[:, :, 1] = text_only
+        debug_img[:, :, 2] = text_only
+        show_img(debug_img)
 
-    segmented_image = np.zeros((height, width, 3), np.uint8)
-    segmented_image[:, :, 0] = img
-    segmented_image[:, :, 1] = text_only
-    segmented_image[:, :, 2] = text_only
-    return segmented_image
-
-
-# def get_bboxes(img: np.ndarray, logger: logging.Logger):
-#     # binary_threshold = 190
-#     # logger.debug(f"Binarizing with threshold value of {binary_threshold}")
-#     # _, binary = cv2.threshold(img, binary_threshold, 255, cv2.THRESH_BINARY_INV )
-
-#     segmented_image = seg.segment_image(gray)
-#     segmented_image = segmented_image[:, :, 2]
-#     components = cc.get_connected_components(segmented_image)
-#     cc.draw_bounding_boxes(img,components,color=(255,0,0),line_size=2)
+    final_components = get_connected_components(text_only)
+    return text_only
 
 
 def main():
@@ -242,8 +192,8 @@ def main():
     img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
     # show_img(img)
 
-    segment_image(img, logger)
-    # get_bboxes(img, logger)
+    result_img = segment_image(img, logger)
+    show_img(result_img)
 
 
 if __name__ == "__main__":

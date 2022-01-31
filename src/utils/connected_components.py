@@ -7,8 +7,42 @@ DATE: Saturday, August 10th 2013
 
   Connected component generation and manipulation utility functions.
 """
+from typing import Optional
+
+import cv2
 import numpy as np
 import scipy.ndimage
+
+
+def draw_bounding_boxes(img: np.ndarray,
+                        connected_components: list[tuple[slice, slice]],
+                        min_size: Optional[int] = None,
+                        color: int | tuple[int, int, int] = (0, 0, 255),
+                        line_size: int = 2) -> np.ndarray:
+    """Draw the connected components as bounding boxes on the image.
+
+    Args:
+        img: The image to draw on.
+        connected_components: The connected components to draw (each component being a tuple of slices)
+        min_size: Components smaller that thise will be filtered out and not drawn.
+        color: Color of the bounding boxes (int for grayscale, tuple for color)
+        line_size:  (use -1 for filled bounding boxes)
+
+    Returns:
+        The image with the bounding boxes on it.
+    """
+    draw_img = img.copy()
+    for component in connected_components:
+        if min_size is not None and bbox_area(component)**0.5 < min_size:
+            continue
+        ys, xs = component
+        cv2.rectangle(draw_img, (xs.start, ys.start), (xs.stop, ys.stop), color, line_size)
+    return draw_img
+
+
+def components_to_bboxes(connected_components: list[tuple[slice, slice]]) -> list[tuple[int, int, int, int]]:
+    # ocr_data["left"], ocr_data["top"], ocr_data["width"], ocr_data["height"]))
+    pass
 
 
 def get_connected_components(img: np.ndarray) -> list[tuple[slice, slice]]:
