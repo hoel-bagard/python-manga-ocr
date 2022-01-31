@@ -7,7 +7,6 @@ DATE: Saturday, August 10th 2013
 
   Connected component generation and manipulation utility functions.
 """
-import cv2
 import numpy as np
 import scipy.ndimage
 
@@ -34,7 +33,7 @@ def get_connected_components(img: np.ndarray) -> list[tuple[slice, slice]]:
 def bbox_area(bbox: tuple[slice, slice]) -> int:
     height = bbox[0].stop - bbox[0].start
     width = bbox[1].stop - bbox[1].start
-    assert width > 0 and height > 0, f"Bounding box has {width=}, {height=}. They should be > 0"
+    # assert width > 0 and height > 0, f"Bounding box has {width=}, {height=}. They should be > 0"
     return height * width
 
 
