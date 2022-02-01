@@ -180,6 +180,7 @@ def main():
         show_img(cv2.hconcat([img, result_img]), "Result")
     if output_path is not None:
         logger.info(f"Saved result at {output_path}")
+        output_path.parent.mkdir(exist_ok=True, parents=True)
         cv2.imwrite(str(output_path), result_img)
 
 
