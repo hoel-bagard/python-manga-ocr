@@ -66,14 +66,14 @@ def render_text(lines: list[str], width, height) -> np.ndarray:
     draw = ImageDraw.Draw(img)
 
     longest_line = lines[np.argmax([len(line) for line in lines])]
-    padding = 7  # Space between lines, in pixels
+    padding = 0  # Space between lines, in pixels
     max_width = width/len(lines) - padding*len(lines)  # width per line, minus padding between lines.
 
     # Increase font size until it fills the bounding box
     font_size = 7
     font = ImageFont.truetype("data/NotoSansJP-Regular.otf", font_size)
     text_font_width, text_font_height = font.getsize(longest_line, direction="ttb")
-    while text_font_width < max_width and text_font_height < 0.95*height:
+    while text_font_width < max_width and text_font_height < height:
         font_size += 1
         font = ImageFont.truetype("data/NotoSansJP-Regular.otf", font_size)
         text_font_width, text_font_height = font.getsize(longest_line, direction="ttb")
