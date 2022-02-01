@@ -15,14 +15,33 @@ sudo wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddat
 sudo wget https://github.com/tesseract-ocr/tessdata_best/raw/main/jpn_vert.traineddata -P /usr/share/tessdata/
 ```
 
+### Install the requirements
+
+## Usage
+```
+python manga_ocr.py <path to input image> -o <path to output image>
+```
+Example:
+```
+python manga_ocr.py data/manga_page_hd.jpeg -o data/ocr_result.png
+```
+
+Result:
+| Input | Output |
+|    :---:      |     :---:     |
+| ![input](/data/manga_page_hd.jpeg?raw "Manga page") | ![output](/data/ocr_result.png?raw "OCR output")|
+
+
+
+## TODO
+Try to use tesseract directly instead of pytesseract ?
 
 
 ## Misc
-Took some ideas/code from:
-https://github.com/Kocarus/Manga-Translator-TesseractOCR/blob/master/locate_bubbles.py
-https://github.com/johnoneil/MangaTextDetection
-https://github.com/johnoneil/MangaTextDetection/blob/master/clean_page.py
+Took some ideas/code from:\
+- https://github.com/Kocarus/Manga-Translator-TesseractOCR/blob/master/locate_bubbles.py
+- https://github.com/johnoneil/MangaTextDetection
 
 
-Not yet but maybe later:
+Not yet but maybe later:\
 https://github.com/leminhyen2/Sugoi-Manga-OCR/blob/main/backendServer/removeFurigana.py

@@ -11,7 +11,7 @@ from src.my_types import OCRData
 from src.render_ocr import render_detected_tesseract, render_text
 from src.text_bboxes import get_text_bboxes
 from src.utils.logger import create_logger
-from src.utils.misc import show_img
+from src.utils.misc import clean_print, show_img
 
 
 def handle_confidence(ocr_data: OCRData, logger: logging.Logger) -> None:
@@ -98,8 +98,8 @@ def ocr_char_to_block(ocr_data: OCRData) -> OCRData:
 
 
 def process_area(img: np.ndarray, logger: logging.Logger, display_images: bool = False):
-    # Tesseract seems to work much better on bigger images. I tried changing the DPI, but it didn't help.
-    # height, width = img.shape
+    # Tesseract seems to (sometimes) work much better on bigger images. I tried changing the DPI, but it didn't help.
+    height, width = img.shape
     # if width < 300:
     #     logger.debug(f"Area had a small width ({width}px), it will be resized.")
     #     img = cv2.resize(img, (2*width, 2*height))
@@ -110,7 +110,11 @@ def process_area(img: np.ndarray, logger: logging.Logger, display_images: bool =
     #     12 Sparse text with OSD.
     # From my limited testing, 12 is more accurate, but does not separate lines (5 does).
     # For the lang, use either "jpn+jpn_vert" or "jpn_vert".
-    ocr_data: OCRData = pytesseract.image_to_data(img, config="--psm 12", lang="jpn+jpn_vert",
+    # I tried adding more option like --oem 3 -c load_system_dawg=0 load_freq_dawg=0 use_new_state_cost=1
+    # but it did not change anything. I might not have done it properly ? (also not sure if the dpi option can be used)
+    ocr_data: OCRData = pytesseract.image_to_data(img,
+                                                  config="--psm 12",
+                                                  lang="jpn_vert",
                                                   output_type=pytesseract.Output.DICT)
     logger.debug(f"Frame processed by Tesseract. Raw output:\n{ocr_data}")
 
@@ -121,9 +125,9 @@ def process_area(img: np.ndarray, logger: logging.Logger, display_images: bool =
 
     ocr_data = ocr_char_to_block(ocr_data)
 
-    if display_images:
-        result_img = render_detected_tesseract(img, ocr_data, draw_bbox=True)
-        show_img(result_img)
+    if logger.getEffectiveLevel() == logging.DEBUG and display_images:
+        result_img = render_detected_tesseract(np.full(img.shape, 255, dtype=np.uint8), ocr_data, draw_bbox=True)
+        show_img(cv2.hconcat([img, result_img]))
 
     logger.debug("OCR results:\n\t" + "\n\t".join(ocr_data["text"]))
     return ocr_data["text"]
@@ -142,34 +146,42 @@ def main():
     output_path: Path = args.output_path
     verbose_level: str = args.verbose_level
     display_images: bool = args.display_images
-    logger = create_logger("Manga reader", verbose_level=verbose_level)
+    logger = create_logger("Manga OCR", verbose_level=verbose_level)
 
     img = cv2.imread(str(img_path), 0)
+    result_img = img.copy()
     if display_images and verbose_level == "debug":
         show_img(img, "Input image")
 
+    logger.info("Looking for potential text areas in the image, this might take a while (~20s).")
     text_bounding_boxes = get_text_bboxes(img, logger)
-    # text_bounding_boxes = [(706, 204, 164, 242), (697, 1625, 135, 231)]
-    padding = 50
-    for left, top, width, height in text_bounding_boxes:
-        logger.debug(f"Processing area with width {width} and height {height}")
+    logger.info(f"Found {len(text_bounding_boxes)} potential text areas. Now doing OCR on them.")
+    padding = 30
+    for i, (left, top, width, height) in enumerate(text_bounding_boxes, start=1):
+        clean_print(f"Processing area {i}/{len(text_bounding_boxes)}", end="\r")
+        logger.debug(f"Processing area with width {width} and height {height}    ({i}/{len(text_bounding_boxes)})")
         # The bouding boxing are pretty tight, add a padding aroung it.
         # Tesseract website: "if you OCR just text area without any border, Tesseract could have problems with it."
+
         padded_crop = cv2.copyMakeBorder(img[top:top+height, left:left+width],
                                          padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=255)
-        # TODO: Try adding erosion.
+        # Tried adding erosion (use dilatation function since text is black on white (or do a bitwise not))
+        # kernel = np.ones((3, 3), np.uint8)
+        # padded_crop = cv2.dilate(padded_crop, kernel, iterations=1)
+
         detected_text = process_area(padded_crop, logger, display_images)
         if detected_text is not None:
             logger.debug(f"Detected text: {detected_text}")
             # Replace original text by the rendered detected one.
-            img[top:top+height, left:left+width] = render_text(detected_text, width, height)
+            result_img[top:top+height, left:left+width] = render_text(detected_text, width, height)
     logger.info("Finished processing the image.")
 
     if display_images:
-        show_img(img, "Result")
+        show_img(cv2.hconcat([img, result_img]), "Result")
     if output_path is not None:
         logger.info(f"Saved result at {output_path}")
-        cv2.imwrite(str(output_path), img)
+        output_path.parent.mkdir(exist_ok=True, parents=True)
+        cv2.imwrite(str(output_path), result_img)
 
 
 if __name__ == "__main__":
