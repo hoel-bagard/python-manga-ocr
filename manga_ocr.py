@@ -156,7 +156,7 @@ def main():
     logger.info("Looking for potential text areas in the image, this might take a while (~20s).")
     text_bounding_boxes = get_text_bboxes(img, logger)
     logger.info(f"Found {len(text_bounding_boxes)} potential text areas. Now doing OCR on them.")
-    padding = 50
+    padding = 30
     for i, (left, top, width, height) in enumerate(text_bounding_boxes, start=1):
         clean_print(f"Processing area {i}/{len(text_bounding_boxes)}", end="\r")
         logger.debug(f"Processing area with width {width} and height {height}    ({i}/{len(text_bounding_boxes)})")
@@ -180,7 +180,7 @@ def main():
         show_img(cv2.hconcat([img, result_img]), "Result")
     if output_path is not None:
         logger.info(f"Saved result at {output_path}")
-        cv2.imwrite(str(output_path), img)
+        cv2.imwrite(str(output_path), result_img)
 
 
 if __name__ == "__main__":
