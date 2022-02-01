@@ -99,7 +99,7 @@ def ocr_char_to_block(ocr_data: OCRData) -> OCRData:
 
 def process_area(img: np.ndarray, logger: logging.Logger, display_images: bool = False):
     # Tesseract seems to (sometimes) work much better on bigger images. I tried changing the DPI, but it didn't help.
-    # height, width = img.shape
+    height, width = img.shape
     # if width < 300:
     #     logger.debug(f"Area had a small width ({width}px), it will be resized.")
     #     img = cv2.resize(img, (2*width, 2*height))
@@ -154,14 +154,7 @@ def main():
         show_img(img, "Input image")
 
     logger.info("Looking for potential text areas in the image, this might take a while (~20s).")
-    # text_bounding_boxes = get_text_bboxes(img, logger)
-    text_bounding_boxes = [(1087, 199, 51, 292), (706, 204, 164, 242), (217, 212, 272, 353), (1397, 526, 87, 154),
-                           (338, 726, 95, 129), (934, 744, 69, 143), (201, 940, 45, 145), (539, 1012, 66, 19),
-                           (233, 1210, 163, 292), (1492, 1225, 53, 232), (1419, 1235, 42, 163), (1459, 1586, 169, 345),
-                           (697, 1625, 135, 231), (1148, 1630, 95, 129), (562, 1738, 31, 48), (188, 1805, 96, 130),
-                           (945, 1828, 130, 200), (184, 2068, 107, 194), (1280, 2072, 9, 15), (629, 2082, 210, 220),
-                           (409, 2232, 81, 115), (929, 2247, 85, 81), (1465, 2317, 128, 44)]
-
+    text_bounding_boxes = get_text_bboxes(img, logger)
     logger.info(f"Found {len(text_bounding_boxes)} potential text areas. Now doing OCR on them.")
     padding = 50
     for i, (left, top, width, height) in enumerate(text_bounding_boxes, start=1):
