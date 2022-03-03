@@ -1,5 +1,9 @@
 # Python Manga OCR
 
+## Get data
+You can get the ブラックジャックによろしく manga [here](https://densho810.com/free/).\
+Unzip them and use the `utils/pdf_to_imgs.py` script to get images (you need to install dependencies for that).
+
 ## Installation
 ### Install Tesseract
 #### Arch
