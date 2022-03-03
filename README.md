@@ -1,5 +1,9 @@
 # Python Manga OCR
 
+## Get data
+You can get the ブラックジャックによろしく manga [here](https://densho810.com/free/).\
+Unzip them and use the `utils/pdf_to_imgs.py` script to get images (you need to install dependencies for that).
+
 ## Installation
 ### Install Tesseract
 #### Arch
@@ -34,14 +38,14 @@ Result:
 
 
 ## TODO
-Try to use tesseract directly instead of pytesseract ?
+- [ ] Try to use tesseract directly instead of pytesseract ? Since given options to pytesseract doesn't seem to do anything. Maybe take inspiration from [here](https://github.com/johnoneil/MangaTextDetection/blob/master/ocr.py).
+- [ ] The RLSA implementation follows the paper, but the paper was made for horizontal text.
 
 
 ## Misc
-Took some ideas/code from:\
+Took some ideas/code from:
 - https://github.com/Kocarus/Manga-Translator-TesseractOCR/blob/master/locate_bubbles.py
 - https://github.com/johnoneil/MangaTextDetection
 
-
-Not yet but maybe later:\
-https://github.com/leminhyen2/Sugoi-Manga-OCR/blob/main/backendServer/removeFurigana.py
+Not yet but maybe later:
+- https://github.com/leminhyen2/Sugoi-Manga-OCR/blob/main/backendServer/removeFurigana.py
