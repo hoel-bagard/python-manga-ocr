@@ -66,7 +66,7 @@ def detect_lines(img: np.ndarray,
     start_row = y_slice.start  # Used both as the starting row if currently on a line, or as a flag.
     for row in range(y_slice.start, y_slice.stop):
         count = np.count_nonzero(img[row, x_slice.start:x_slice.stop])
-        if count <= min_threshold or row == (y_slice.stop):
+        if count <= min_threshold or row == y_slice.stop-1:
             if start_row >= 0:
                 lines.append((slice(start_row, row), slice(x_slice.start, x_slice.stop)))
                 start_row = -1
@@ -97,8 +97,8 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
         An mask with the same shape as the input image. (white where text is, black elsewhere)
         The mask is composed of rectangles, each rectangle corresponding to a text zone.
     """
-    vsv = 0.75*average_size  # Note: the 0.75 used to be in the config
-    hsv = 0.75*average_size
+    vsv = 1*average_size  # TODO: Put those magic numbers in the config
+    hsv = 1*average_size
     height, width = cleaned_img.shape[:2]
     logger.debug(f"Applying run length smoothing with vertical threshold {vsv:.2f} and horizontal threshold {hsv:.2f}")
 
@@ -116,26 +116,26 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
         if len(v_lines) < 2 and len(h_lines) < 2:
             continue
 
-        # TODO: Wouldn't it be possible to just use the slice to set the values to 255 ?
-        cv2.rectangle(text, (component[1].start, component[0].start), (component[1].stop, component[0].stop), 255, -1)
+        # Mask the component's location.
+        # cv2.rectangle(text, (component[1].start, component[0].start), (component[1].stop, component[0].stop), 255, -1)
+        text[component[0].start:component[0].stop, component[1].start:component[1].stop] = 255
 
+    print(display_images)
+    print(logger.getEffectiveLevel())
     if logger.getEffectiveLevel() == logging.DEBUG and display_images:
         components_img = cleaned_img.copy()
         [cv2.rectangle(components_img, (c[1].start, c[0].start), (c[1].stop, c[0].stop), 127, 4) for c in components]
-        show_img(cv2.hconcat([cleaned_img, rlsa_result, components_img, text]),
-                 "Input, RLSA result, components and text")
+        show_img(cv2.hconcat([cleaned_img, rlsa_result, components_img, text]), "Input, RLSA result, components, text")
 
     return text
 
 
 def get_text_bboxes(img: np.ndarray,
                     logger: logging.Logger,
-                    min_scale: float = 0.15,
+                    min_scale: float = 0.25,
                     max_scale: float = 4.,
                     display_images: bool = False) -> list[tuple[int, int, int, int]]:
     """Return the bounding boxes corresponding to the blocks of text on the image.
-
-    # TODO: try to augment min_scale
 
     Args:
         img: The image to process.
@@ -151,25 +151,16 @@ def get_text_bboxes(img: np.ndarray,
     logger.debug(f"Processing {height}x{width} image, looking for text bounding boxes.")
 
     # Create gaussian filtered and unfiltered binary images
-    binary_threshold = 190
+    binary_threshold = 230  # TODO: Config
     logger.debug(f"Binarizing images with threshold value of {binary_threshold}")
     _, binary = cv2.threshold(img, binary_threshold, 255, cv2.THRESH_BINARY_INV)
 
     binary_average_size = get_cc_average_size(binary)
     logger.debug(f"Average cc size for binaryized grayscale image is {binary_average_size:.2f}")
 
-    # The necessary sigma needed for Gaussian filtering (to remove screentones and other noise) seems
-    # to be a function of the resolution the manga was scanned at (or original page size, I'm not sure).
-    # Assuming "normal" page size for a phonebook style Manga is 17.5cmx11.5cm (6.8x4.5in).
-    # A scan of 300dpi will result in an image about 1900x1350, which requires a sigma of 1.5 to 1.8.
-    # I'm encountering many smaller images that may be nonstandard scanning dpi values or just smaller magazines.
-    # Haven't found hard info on this yet. They require sigma values of about 0.5 to 0.7.
-    # I'll therefore (for now) just calculate required (nonspecified) sigma as a linear function of vertical
-    # image resolution.
-    sigma = (0.8/676.0)*float(height)-0.9
+    sigma = 1.5  # (0.8/676.0)*float(height)-0.9
     logger.debug(f"Applying Gaussian filter with sigma (std dev) of {sigma:.2f}")
     gaussian_filtered = scipy.ndimage.gaussian_filter(img, sigma=sigma)
-
     _, gaussian_binary = cv2.threshold(gaussian_filtered, binary_threshold, 255, cv2.THRESH_BINARY_INV)
 
     # Draw out statistics on average connected component size in the rescaled, binary image
@@ -203,7 +194,7 @@ def get_text_bboxes(img: np.ndarray,
     # TODO: That was actually used.
     # (text_like_areas, nontext_like_areas) = filter_text_like_areas(img, segmentation=text_only,
     #                                                                average_size=average_size)
-    # logger.debug(f"{len(text_like_areas)} potential textl areas have been detected in total.")
+    # logger.debug(f"{len(text_like_areas)} potential text areas have been detected in total.")
     # text_only = np.zeros(img.shape)
     # text_only = draw_bounding_boxes(text_only, text_like_areas, color=(255), line_size=-1)
 
@@ -215,25 +206,30 @@ def get_text_bboxes(img: np.ndarray,
         show_img(debug_img)
 
     final_components = get_connected_components(text_only)
-    return components_to_bboxes(final_components)
+    final_bboxes = components_to_bboxes(final_components)
+    return final_bboxes
 
 
 def main():
     parser = ArgumentParser(description="Manga page cleaning script. Run with 'python -m src.clean_image <path>'.")
     parser.add_argument("img_path", type=Path, help="Path to the dataset")
+    parser.add_argument("--display_images", "-d", action="store_true", help="Displays some debug images.")
     parser.add_argument("--verbose_level", "-v", choices=["debug", "info", "error"], default="info", type=str,
                         help="Logger level.")
     args = parser.parse_args()
 
     img_path: Path = args.img_path
+    display_images: bool = args.display_images
     verbose_level: str = args.verbose_level
     logger = create_logger("Manga cleaner", verbose_level=verbose_level)
 
     img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
 
-    bboxes = get_text_bboxes(img, logger)
+    bboxes = get_text_bboxes(img, logger, display_images=display_images)
     for left, top, width, height in bboxes:
-        cv2.rectangle(img, (left, top), (left+width, top+height), 127, 3)
+        if width * height < 5000:
+            continue
+        cv2.rectangle(img, (left, top), (left+width, top+height), 127, -1)  # Last param: 3 for contour, -1 for filled
     show_img(img)
 
 

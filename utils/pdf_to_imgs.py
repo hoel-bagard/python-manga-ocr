@@ -35,7 +35,7 @@ def main():
         rel_path = pdf_path.relative_to(data_path)
         output_path = output_dir / rel_path.stem
         output_path.mkdir(exist_ok=True, parents=True)
-        images = convert_from_path(pdf_path, dpi=300, output_folder=output_path, output_file=name_generator())  # noqa
+        images = convert_from_path(pdf_path, dpi=200, output_folder=output_path, output_file=name_generator())  # noqa
 
 
 if __name__ == "__main__":
