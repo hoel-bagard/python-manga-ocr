@@ -5,20 +5,6 @@ You can get the ブラックジャックによろしく manga [here](https://den
 Unzip them and use the `utils/pdf_to_imgs.py` script to get images (you need to install dependencies for that).
 
 ## Installation
-### Install Tesseract
-#### Arch
-On arch you can use:
-```
-sudo pacman -S tesseract python-pytesseract tesseract-data-jpn
-```
-
-This will install tesseract and the basic Japanese data.\
-However it will not install the vertical trained data. You can get it (and install it) with one of the two following commands. I'm currently using the second one.
-```
-sudo wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata -P /usr/share/tessdata/
-sudo wget https://github.com/tesseract-ocr/tessdata_best/raw/main/jpn_vert.traineddata -P /usr/share/tessdata/
-```
-
 ### Install the requirements
 
 ## Usage
@@ -37,8 +23,7 @@ Result:
 
 
 
-## TODO
-- [ ] Try to use tesseract directly instead of pytesseract ? Since given options to pytesseract doesn't seem to do anything. Maybe take inspiration from [here](https://github.com/johnoneil/MangaTextDetection/blob/master/ocr.py).
+## TODOs
 - [ ] The RLSA implementation follows the paper, but the paper was made for horizontal text.
 
 
