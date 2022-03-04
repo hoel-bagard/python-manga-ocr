@@ -76,12 +76,12 @@ def bbox_area(bbox: tuple[slice, slice]) -> int:
     return height * width
 
 
-def get_cc_average_size(img: np.ndarray, minimum_area: int = 3, maximum_area: int = 100) -> float:
-    """Compute the connected components of the given image, and return their average size after filtering by area.
+def get_cc_average_size(img: np.ndarray, minimum_area: int = 9, maximum_area: int = 1000) -> float:
+    """Compute the connected components of the given image, and return their average area after filtering.
 
     Args:
         img: The image to process.
-        minimum_area: Components smaller than this value are discarded. TODO: Not used as an area value...
+        minimum_area: Components smaller than this value are discarded.
         maximum_area: Components bigger than this value are discarded.
 
     Returns:
@@ -89,7 +89,7 @@ def get_cc_average_size(img: np.ndarray, minimum_area: int = 3, maximum_area: in
     """
     components = get_connected_components(img)
     sorted_components = sorted(components, key=bbox_area)
-    # sorted_components = sorted(components,key=lambda x:area_nz(x,binary))
+
     areas = np.zeros(img.shape)
     for component in sorted_components:
         # If an area has already been set within the current component, then skip. (i.e. no overwriting)
@@ -97,19 +97,16 @@ def get_cc_average_size(img: np.ndarray, minimum_area: int = 3, maximum_area: in
         # (For example individual letters vs whole panel)
         if np.amax(areas[component]) > 0:
             continue
-        # TODO: check if the area value used has a big influence.
-        # Take the sqrt of the area of the bounding box
-        areas[component] = bbox_area(component)**0.5
-        # Alternate implementation where we just use area of black pixels in cc
-        # areas[component] = area_nz(component, binary)
+
+        areas[component] = bbox_area(component)
 
     # Only keep the areas values that are within the desired range.
     # (by default connected components between 3 and 100 pixels on a side (text sized))
     kept_areas = areas[(areas > minimum_area) & (areas < maximum_area)]
     if len(kept_areas) == 0:
         return 0
-    # Lastly take the median  # TODO: compare with average. Compare with median of set.
-    return np.median(kept_areas)
+
+    return np.mean(list(set(kept_areas)))  # Used to be np.median(kept_areas).
 
 
 def form_mask(img: np.ndarray, max_size: float, min_size: float) -> np.ndarray:

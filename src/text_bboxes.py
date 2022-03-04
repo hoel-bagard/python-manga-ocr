@@ -1,4 +1,5 @@
 import logging
+import math
 from argparse import ArgumentParser
 from pathlib import Path
 from typing import Optional
@@ -172,10 +173,10 @@ def get_text_bboxes(img: np.ndarray,
     _, gaussian_binary = cv2.threshold(gaussian_filtered, config.binary_threshold, 255, cv2.THRESH_BINARY_INV)
 
     # Draw out statistics on average connected component size in the rescaled, binary image
-    average_size = get_cc_average_size(gaussian_binary)
-    logger.debug(f"Binarized Gaussian filtered image average cc size: {average_size:.2f}")
-    max_size = average_size*max_scale
-    min_size = average_size*min_scale
+    average_area = get_cc_average_size(gaussian_binary)
+    logger.debug(f"Binarized Gaussian filtered image average cc area: {average_area:.2f}")
+    max_size = math.sqrt(average_area)*max_scale
+    min_size = math.sqrt(average_area)*min_scale
 
     # Create a mask based on the connected components's non zero values, filtered by size
     mask = form_mask(gaussian_binary, max_size, min_size)
