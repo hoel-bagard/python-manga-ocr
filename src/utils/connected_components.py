@@ -1,17 +1,10 @@
-"""
-Author: John O'Neil
-Email: oneil.john@gmail.com
-Origin: https://github.com/johnoneil/MangaTextDetection/blob/master/connected_components.py
-DATE: Saturday, August 10th 2013
-      Revision: Thursday, August 15th 2013
-
-  Connected component generation and manipulation utility functions.
-"""
 from typing import Optional
 
 import cv2
 import numpy as np
 import scipy.ndimage
+
+from src.my_types import BBox
 
 
 def draw_bounding_boxes(img: np.ndarray,
@@ -40,7 +33,7 @@ def draw_bounding_boxes(img: np.ndarray,
     return draw_img
 
 
-def components_to_bboxes(connected_components: list[tuple[slice, slice]]) -> list[tuple[int, int, int, int]]:
+def components_to_bboxes(connected_components: list[tuple[slice, slice]]) -> list[BBox]:
     """Converts components (slices) to bounding boxes (tuples).
 
     Args:
@@ -52,7 +45,7 @@ def components_to_bboxes(connected_components: list[tuple[slice, slice]]) -> lis
     bboxes = []
     for component in connected_components:
         ys, xs = component
-        bboxes.append((xs.start, ys.start, xs.stop-xs.start, ys.stop-ys.start))
+        bboxes.append(BBox(xs.start, ys.start, xs.stop-xs.start, ys.stop-ys.start))
     return bboxes
 
 

@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import scipy.ndimage
 
+from src.my_types import BBox
 from src.utils.connected_components import (
     components_to_bboxes,
     form_mask,
@@ -16,6 +17,15 @@ from src.utils.connected_components import (
 from src.utils.logger import create_logger
 from src.utils.misc import show_img
 from src.utils.rlsa import rlsa
+
+
+def filter_bbox_size(bboxes: list[BBox], min_area: int = 5000) -> list[BBox]:
+    """Filter out all the bounding boxes whose area is bellow the given threshold."""
+    for bbox in reversed(bboxes):
+        *_, width, height = bbox
+        if width * height < min_area:
+            bboxes.remove(bbox)
+    return bboxes
 
 
 def get_canny_hulls_mask(img: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
@@ -206,7 +216,8 @@ def get_text_bboxes(img: np.ndarray,
         show_img(debug_img)
 
     final_components = get_connected_components(text_only)
-    final_bboxes = components_to_bboxes(final_components)
+    bboxes = components_to_bboxes(final_components)
+    final_bboxes = filter_bbox_size(bboxes, 5000)  # TODO: 5000 to config
     return final_bboxes
 
 
@@ -227,8 +238,6 @@ def main():
 
     bboxes = get_text_bboxes(img, logger, display_images=display_images)
     for left, top, width, height in bboxes:
-        if width * height < 5000:
-            continue
         cv2.rectangle(img, (left, top), (left+width, top+height), 127, -1)  # Last param: 3 for contour, -1 for filled
     show_img(img)
 

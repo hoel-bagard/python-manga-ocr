@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import NamedTuple, TypedDict
 
 
 class OCRData(TypedDict):
@@ -17,3 +17,10 @@ class OCRData(TypedDict):
     height: list[int]
     conf: list[int]  # Confidence level, between 0 and 100.
     text: list[str]  # The detected characters/words.
+
+
+class BBox(NamedTuple):
+    left: int
+    top: int
+    width: int
+    height: int
