@@ -10,6 +10,10 @@ class GenerationConfig:
     # all the bounding boxes whose area is inferior to this threshold are discarded
     min_bbox_area: int = 5000
 
+    # Values used in the RLSA algorithm, used to be based on the average cc size.
+    vsv: int = 35
+    hsv: int = 35
+
 
 def get_generation_config() -> GenerationConfig:
     return GenerationConfig()

@@ -87,7 +87,8 @@ def detect_lines(img: np.ndarray,
 
 
 def cleaned_to_text_mask(cleaned_img: np.ndarray,
-                         average_size: float,
+                         hsv: int,
+                         vsv: int,
                          logger: logging.Logger,
                          display_images: bool = False) -> np.ndarray:
     """Takes in a cleaned image and returns a mask of the (likely) text boxes.
@@ -100,7 +101,8 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
     Args:
         cleaned_img: The image to process. It should be a black and white image that has already been
                      preprocessed so that most of the background / noise has been removed.
-        average_size: The average size of the component (i.e. object blocks) on the image.
+        hsv: The horizontal threshold to use in the RLSA.
+        vsv: The vertical threshold to use in the RLSA.
         logger: Logger use to print things.
         display_images: If True, some images might get displayed.
 
@@ -108,8 +110,6 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
         An mask with the same shape as the input image. (white where text is, black elsewhere)
         The mask is composed of rectangles, each rectangle corresponding to a text zone.
     """
-    vsv = 1*average_size  # TODO: Put those magic numbers in the config
-    hsv = 1*average_size
     height, width = cleaned_img.shape[:2]
     logger.debug(f"Applying run length smoothing with vertical threshold {vsv:.2f} and horizontal threshold {hsv:.2f}")
 
@@ -128,7 +128,6 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
             continue
 
         # Mask the component's location.
-        # cv2.rectangle(text, (component[1].start, component[0].start), (component[1].stop, component[0].stop), 255, -1)
         text[component[0].start:component[0].stop, component[1].start:component[1].stop] = 255
 
     if logger.getEffectiveLevel() == logging.DEBUG and display_images:
@@ -187,7 +186,7 @@ def get_text_bboxes(img: np.ndarray,
 
     # Apply mask and return images
     cleaned = cv2.bitwise_not(final_mask * binary)
-    text_only = cleaned_to_text_mask(cleaned, average_size, logger, display_images)
+    text_only = cleaned_to_text_mask(cleaned, config.hsv, config.vsv, logger, display_images)
 
     if logger.getEffectiveLevel() == logging.DEBUG and display_images:
         debug_img = np.zeros((height, width, 3), np.uint8)

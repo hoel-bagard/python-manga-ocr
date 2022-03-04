@@ -59,7 +59,7 @@ def get_connected_components(img: np.ndarray) -> list[tuple[slice, slice]]:
         A list of tuples. Each tuple contains two slices that correspond to the bounds of the corresponding object.
     """
     # Generate a 3x3 matrix of Trues, i.e. a structuring element that will consider features connected
-    # even if they touch diagonally. This results in a slightly smaller number of features
+    # even if they touch diagonally. This results in a slightly smaller number of features.
     # structure = scipy.ndimage.morphology.generate_binary_structure(2, 2)
     # label, num_features = scipy.ndimage.measurements.label(image, structure=structure)
 
@@ -69,6 +69,7 @@ def get_connected_components(img: np.ndarray) -> list[tuple[slice, slice]]:
 
 
 def bbox_area(bbox: tuple[slice, slice]) -> int:
+    """Returns the area of a component."""
     height = bbox[0].stop - bbox[0].start
     width = bbox[1].stop - bbox[1].start
     # assert width > 0 and height > 0, f"Bounding box has {width=}, {height=}. They should be > 0"
@@ -116,7 +117,9 @@ def form_mask(img: np.ndarray, max_size: float, min_size: float) -> np.ndarray:
 
     This keep only the elements of the image that belong to a connected components whose size is within
     the given bounds.
-    TODO: This function also assume that the text is white on black (it is the case because of the inv binary threshold)
+
+    Note: This function also assume that the text is white on black.
+          It is the case in the get_text_boxes function because of the inv binary threshold.
 
     Args:
         img (np.ndarray): The image to process.
