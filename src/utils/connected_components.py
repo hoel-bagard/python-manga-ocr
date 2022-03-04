@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import scipy.ndimage
 
-from src.my_types import BBox
+from src.utils.my_types import BBox
 
 
 def draw_bounding_boxes(img: np.ndarray,

@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import scipy.ndimage
 
-from src.my_types import BBox
+from config.generation_config import get_generation_config
 from src.utils.connected_components import (
     components_to_bboxes,
     form_mask,
@@ -16,6 +16,7 @@ from src.utils.connected_components import (
 )
 from src.utils.logger import create_logger
 from src.utils.misc import show_img
+from src.utils.my_types import BBox
 from src.utils.rlsa import rlsa
 
 
@@ -130,8 +131,6 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
         # cv2.rectangle(text, (component[1].start, component[0].start), (component[1].stop, component[0].stop), 255, -1)
         text[component[0].start:component[0].stop, component[1].start:component[1].stop] = 255
 
-    print(display_images)
-    print(logger.getEffectiveLevel())
     if logger.getEffectiveLevel() == logging.DEBUG and display_images:
         components_img = cleaned_img.copy()
         [cv2.rectangle(components_img, (c[1].start, c[0].start), (c[1].stop, c[0].stop), 127, 4) for c in components]
@@ -157,21 +156,21 @@ def get_text_bboxes(img: np.ndarray,
     Returns:
         A list of tuples. Each tuple has 4 ints forming a bounding box: (top left, top, width, height).
     """
+    config = get_generation_config()
     height, width = img.shape[:2]
     logger.debug(f"Processing {height}x{width} image, looking for text bounding boxes.")
 
     # Create gaussian filtered and unfiltered binary images
-    binary_threshold = 230  # TODO: Config
-    logger.debug(f"Binarizing images with threshold value of {binary_threshold}")
-    _, binary = cv2.threshold(img, binary_threshold, 255, cv2.THRESH_BINARY_INV)
+    logger.debug(f"Binarizing images with threshold value of {config.binary_threshold}")
+    _, binary = cv2.threshold(img, config.binary_threshold, 255, cv2.THRESH_BINARY_INV)
 
     binary_average_size = get_cc_average_size(binary)
     logger.debug(f"Average cc size for binaryized grayscale image is {binary_average_size:.2f}")
 
-    sigma = 1.5  # (0.8/676.0)*float(height)-0.9
+    sigma = 1.5  # (0.8/676.0)*height0.9
     logger.debug(f"Applying Gaussian filter with sigma (std dev) of {sigma:.2f}")
     gaussian_filtered = scipy.ndimage.gaussian_filter(img, sigma=sigma)
-    _, gaussian_binary = cv2.threshold(gaussian_filtered, binary_threshold, 255, cv2.THRESH_BINARY_INV)
+    _, gaussian_binary = cv2.threshold(gaussian_filtered, config.binary_threshold, 255, cv2.THRESH_BINARY_INV)
 
     # Draw out statistics on average connected component size in the rescaled, binary image
     average_size = get_cc_average_size(gaussian_binary)
@@ -190,24 +189,6 @@ def get_text_bboxes(img: np.ndarray,
     cleaned = cv2.bitwise_not(final_mask * binary)
     text_only = cleaned_to_text_mask(cleaned, average_size, logger, display_images)
 
-    # TODO: That was actually used.
-    # If desired, suppress furigana characters (which interfere with OCR)
-    # suppress_furigana = arg.boolean_value('furigana')
-    # if suppress_furigana:
-    #     logger.debug("Attempting to suppress furigana characters which interfere with OCR.")
-    #     furigana_mask = furigana.estimate_furigana(cleaned, text_only)
-    #     furigana_mask = np.array(furigana_mask==0,'B')
-    #     cleaned = cv2.bitwise_not(cleaned)*furigana_mask
-    #     cleaned = cv2.bitwise_not(cleaned)
-    #     text_only = cleaned2segmented(cleaned, average_size)
-
-    # TODO: That was actually used.
-    # (text_like_areas, nontext_like_areas) = filter_text_like_areas(img, segmentation=text_only,
-    #                                                                average_size=average_size)
-    # logger.debug(f"{len(text_like_areas)} potential text areas have been detected in total.")
-    # text_only = np.zeros(img.shape)
-    # text_only = draw_bounding_boxes(text_only, text_like_areas, color=(255), line_size=-1)
-
     if logger.getEffectiveLevel() == logging.DEBUG and display_images:
         debug_img = np.zeros((height, width, 3), np.uint8)
         debug_img[:, :, 0] = img
@@ -217,7 +198,7 @@ def get_text_bboxes(img: np.ndarray,
 
     final_components = get_connected_components(text_only)
     bboxes = components_to_bboxes(final_components)
-    final_bboxes = filter_bbox_size(bboxes, 5000)  # TODO: 5000 to config
+    final_bboxes = filter_bbox_size(bboxes, config.min_bbox_area)
     return final_bboxes
 
 
