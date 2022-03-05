@@ -39,19 +39,7 @@ def main():
     for i, (left, top, width, height) in enumerate(text_bounding_boxes, start=1):
         clean_print(f"Processing area {i}/{len(text_bounding_boxes)}", end="\r")
         logger.debug(f"Processing area with width {width} and height {height}    ({i}/{len(text_bounding_boxes)})")
-        # The bouding boxing are pretty tight, add a padding aroung it.
-        # Tesseract website: "if you OCR just text area without any border, Tesseract could have problems with it."
 
-        padded_crop = cv2.copyMakeBorder(img[top:top+height, left:left+width],
-                                         padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=255)
-
-        detected_text = process_area(padded_crop, logger, display_images)
-        if detected_text is not None:
-            logger.debug(f"Detected text: {detected_text}")
-            # Replace original text by the rendered detected one.
-            result_img[top:top+height, left:left+width] = render_text(detected_text, width, height)
-
-        # result_img[top:top+height, left:left+width] = 150
 
     logger.info("Finished processing the image.")
 

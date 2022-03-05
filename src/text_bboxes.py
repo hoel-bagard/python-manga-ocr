@@ -204,18 +204,24 @@ def get_text_bboxes(img: np.ndarray,
     return final_bboxes
 
 
-def filter_bubbles(img: npt.NDArray[np.uint8], bboxes: list[BBox], display_imgs: bool = False) -> list[BBox]:
-    """"Given an image and a list of likely text bounding boxes, try to remove some false detection.
+def filter_bubbles(img: npt.NDArray[np.uint8],
+                   bboxes: list[BBox],
+                   display_imgs: bool = False) -> tuple[npt.NDArray[np.uint8], list[BBox]]:
+    """Given an image and a list of likely text bounding boxes, try to remove some false detection.
 
     The idea here is to remove the "text" that has been detected, and then to look for other components within the
     text's container. Usually a text bubble contains only text, therefore if there are other things within the
     container, then it was probably not a text bubble.
 
     Args:
-        img: .
-        bboxes: .
+        img: The original image.
+        bboxes: The text bouding boxes candidates.
         display_imgs: Use for debug, display some intermediate results.
+
+    Returns:
+        The list of kept (and expanded) bounding boxes, along with the image with the bubbles' inside removed.
     """
+    input_img = img.copy()
     # Threshold to get some clear boundaries for the text bubbles
     _, img = cv2.threshold(img, 252, 255, cv2.THRESH_BINARY)
 
@@ -251,30 +257,57 @@ def filter_bubbles(img: npt.NDArray[np.uint8], bboxes: list[BBox], display_imgs:
 
     # Remove all the contours that have children or are children
     kept_contours = []
-    mask_debug = np.zeros((img.shape[0]+2, img.shape[1]+2), dtype=np.uint8)
+    mask_contours = np.zeros_like(input_img)
     for i, (*_, child, hierarchy_lvl) in enumerate(hierarchy[0]):
         if child == -1 and hierarchy_lvl == -1:
             kept_contours.append(contours[i])
-            cv2.drawContours(mask_debug, contours, i, 125, 2, cv2.LINE_8, hierarchy, 0)
+            cv2.drawContours(mask_contours, contours, i, 100, -1, cv2.LINE_8, hierarchy, 0)
+            cv2.drawContours(mask_contours, contours, i, 255, 2, cv2.LINE_8, hierarchy, 0)
     if display_imgs:
-        show_img(mask_debug, "Kept contours")
+        show_img(mask_contours, "Kept contours")
 
-    # Totally clean the image by using the mask/contours (and save it to disk)
+    # Remove the inside of the text boxes from the image by using the mask/contours, so that we can
+    # put anything there easily later.
+    cleaned_img = np.where(mask_contours != 100, input_img, 255)
+    # if display_imgs:
+    #     show_img(cleaned_img, "Cleaned image")
 
-    # Match each kept contour to its text bbox. Then progressively enlarge the bbox.
-    # Note: I could start from the contour's centroid instead, but that would likely result
-    #       in more square-ish bboxes (i.e. worse fit to the bubble).
-    while at least one line does not contain black:
-        if line 1 does not contain black:
-            line 1 moves left
-        etc..
-    # Then save the bounding boxes to a file.
+    # Match each kept contour to its text bbox. Then progressively enlarge the bbox until it fits the bubble.
+    # Note: I could start from the contour's centroid instead (easy to get with the moments), but that would likely
+    #       result in more square-ish bboxes (i.e. worse fit to the bubble).
+    final_text_bboxes = []
+    for contour in kept_contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        for left, top, width, height in bboxes:
+            center_x, center_y = left+width//2, top+height//2
+            # If the center of a text bbox is within the bounding rect of a contour, then we consider that they match.
+            if x <= center_x and center_x <= x+w and y <= center_y and center_y <= y+h:
+                prev_bbox = (0, 0, 0, 0)
+                while prev_bbox != (left, top, width, height):
+                    prev_bbox = (left, top, width, height)
+                    # Move left line
+                    if (mask_contours[top:top+height, left] == 100).all():
+                        left -= 1
+                    # Move right line
+                    if (mask_contours[top:top+height, left+width] == 100).all():
+                        width += 1
+                    # Move top line
+                    if (mask_contours[top, left:left+width] == 100).all():
+                        top -= 1
+                    # Move bottom line
+                    if (mask_contours[top+height, left:left+width] == 100).all():
+                        height += 1
+                final_text_bboxes.append(BBox(left, top, width, height))
 
-    # for contour in kept_contours:
-    #     # moments = cv2.moments(contour)
-    #     # centroid_x = int(moments["m10"]/moments["m00"])
-    #     # centroid_y = int(moments["m01"]/moments["m00"])
+    if display_imgs:
+        bbox_img = cleaned_img.copy()
+        for bbox in bboxes:
+            bbox_img = cv2.rectangle(bbox_img, (bbox.left, bbox.top), (bbox.left+bbox.width, bbox.top+bbox[3]), 122, 5)
+        for bbox in final_text_bboxes:
+            bbox_img = cv2.rectangle(bbox_img, (bbox.left, bbox.top), (bbox.left+bbox.width, bbox.top+bbox[3]), 0, 5)
+        show_img(bbox_img, "Cleaned image with text bboxes")
 
+    return cleaned_img, final_text_bboxes
 
 
 def main():
@@ -293,27 +326,12 @@ def main():
 
     img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
 
-    # bboxes = get_text_bboxes(img, logger, display_images=display_images)
-    # For page 20
-    # bboxes = [BBox(left=695, top=194, width=43, height=152),
-    #           BBox(left=680, top=713, width=39, height=209),
-    #           BBox(left=213, top=844, width=82, height=251),
-    #           BBox(left=558, top=1148, width=123, height=215),
-    #           BBox(left=195, top=1370, width=173, height=217),
-    #           BBox(left=598, top=1771, width=54, height=141)]
-    # For page 21
-    bboxes = [BBox(left=602, top=192, width=41, height=209),
-              BBox(left=949, top=367, width=281, height=319),
-              BBox(left=138, top=424, width=125, height=327),
-              BBox(left=469, top=1345, width=53, height=431),
-              BBox(left=723, top=1351, width=107, height=48),
-              BBox(left=1194, top=1394, width=40, height=215),
-              BBox(left=892, top=1703, width=170, height=145)]
+    bboxes = get_text_bboxes(img, logger, display_images=display_images)
+    cleaned_img, final_text_bboxes = filter_bubbles(img, bboxes, display_images)
 
-    filter_bubbles(img, bboxes, display_images)
-    # for left, top, width, height in bboxes:
-    #     cv2.rectangle(img, (left, top), (left+width, top+height), 127, -1)  # Last param: 3 for contour, -1 for filled
-    # show_img(img)
+    for bbox in final_text_bboxes:
+        cleaned_img = cv2.rectangle(cleaned_img, (bbox.left, bbox.top), (bbox.left+bbox.width, bbox.top+bbox[3]), 0, 5)
+    show_img(cleaned_img, "Result")
 
 
 if __name__ == "__main__":
