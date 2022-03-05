@@ -221,6 +221,10 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     _, img = cv2.threshold(img, 252, 255, cv2.THRESH_BINARY)
 
     # Remove the detected "text"
+    # TODO: This is not perfect: often the bottom corners of the bbox can pierce the bubble's boundary, leading it
+    #       to be discarded later on.
+    #       Maybe try to do RLSA, then remove only the biggest component
+    #       (Hopefully that'll be all the text and not the part of the bbox, issue being that RLSA is super slow.)
     for left, top, width, height in bboxes:
         img[top:top+height, left:left+width] = 255
 
