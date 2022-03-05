@@ -12,7 +12,8 @@ class GenerationConfig:
 
     # At the end of the text detection based on connected components part,
     # all the bounding boxes whose area is inferior to this threshold are discarded
-    min_bbox_area: int = 5000
+    # Used to be 5000, but the bubble filtering is pretty good, so it's better to keep a "low" value now.
+    min_bbox_area: int = 1000
 
     # Values used in the RLSA algorithm, used to be based on the average cc size.
     vsv: int = 35

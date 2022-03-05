@@ -225,8 +225,18 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     #       to be discarded later on.
     #       Maybe try to do RLSA, then remove only the biggest component
     #       (Hopefully that'll be all the text and not the part of the bbox, issue being that RLSA is super slow.)
+    # https://docs.opencv.org/3.4/d3/dc0/group__imgproc__shape.html#gaedef8c7340499ca391d459122e51bef5
     for left, top, width, height in bboxes:
-        img[top:top+height, left:left+width] = 255
+        img_patch = img[top:top+height, left:left+width].copy()
+        img_patch = rlsa(img_patch, 15, 35)  # TODO: use config
+        img_patch = cv2.bitwise_not(img_patch)
+        nb_labels, img_labels = cv2.connectedComponents(img_patch)
+
+        # With the opencv cc, there is always 0 for the background and then one int per cc.
+        # If there is more than one cc, then keep only the biggest.
+        mask_idx = np.argmax([len(img_labels[img_labels == i]) for i in range(1, nb_labels)]) + 1
+        img[top:top+height, left:left+width] = np.where(img_labels != mask_idx, img[top:top+height, left:left+width], 255)
+
 
     # There's some noise around where the text was, try to remove a bit of it without creating holes in the border
     kernel = np.ones((3, 3), np.uint8)
@@ -270,16 +280,10 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
         show_img(debug_contours, "All contours")
         show_img(mask_contours, "Kept contours")
 
-    # Remove the inside of the text boxes from the image by using the mask/contours, so that we can
-    # put anything there easily later.
-    cleaned_img = np.where(mask_contours != 100, input_img, 255)
-    # if display_imgs:
-    #     show_img(cleaned_img, "Cleaned image")
-
     # Match each kept contour to its text bbox. Then progressively enlarge the bbox until it fits the bubble.
     # Note: I could start from the contour's centroid instead (easy to get with the moments), but that would likely
     #       result in more square-ish bboxes (i.e. worse fit to the bubble).
-    final_text_bboxes = []
+    adjusted_text_bboxes: list[BBox] = []
     for contour in kept_contours:
         x, y, w, h = cv2.boundingRect(contour)
         for left, top, width, height in bboxes:
@@ -301,7 +305,29 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
                     # Move bottom line
                     if (mask_contours[top+height, left:left+width] == 100).all():
                         height += 1
-                final_text_bboxes.append(BBox(left, top, width, height))
+                adjusted_text_bboxes.append(BBox(left, top, width, height))
+
+    # Filter by area again. With a bigger value than for just the text box.
+    # The idea is that even for a small text box (one or two charaters), the bubble is usually pretty big, and therefore
+    # the expanded bbox should have a bigger area.
+    # Whereas a small non text bbox will probably not expand much (an eye for example).
+    final_text_bboxes: list[BBox] = []
+    final_contours = []
+    for bbox, contour in zip(adjusted_text_bboxes, kept_contours):
+        if bbox.width * bbox.height > 3000:  # TODO: config, 3 times base value
+            final_text_bboxes.append(bbox)
+            final_contours.append(contour)
+
+    # Remove the inside of the text boxes from the image by using the mask/contours, so that we can
+    # put anything there easily later.
+    final_mask = np.zeros_like(input_img)
+    cv2.drawContours(final_mask, final_contours, -1, 255, -1, cv2.LINE_8)
+    cleaned_img = np.where(final_mask == 255, 255, input_img)
+    # cleaned_img = input_img
+    # for left, top, width, height in final_text_bboxes:
+    #     cleaned_img[top:top+height, left:left+width] = 255
+    # if display_imgs:
+    #     show_img(cleaned_img, "Cleaned image")
 
     if display_imgs:
         bbox_img = cleaned_img.copy()
