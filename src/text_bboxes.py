@@ -142,16 +142,12 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
 
 def get_text_bboxes(img: np.ndarray,
                     logger: logging.Logger,
-                    min_scale: float = 0.25,
-                    max_scale: float = 4.,
                     display_images: bool = False) -> list[tuple[int, int, int, int]]:
     """Return the bounding boxes corresponding to the blocks of text on the image.
 
     Args:
         img: The image to process.
         logger: A logger, mostly used to print debug information (also shows images in debug mode).
-        max_scale: Used to filter out components.
-        min_scale: Used to filter out components.
         display_images: If True, some images might get displayed.
 
     Returns:
@@ -176,8 +172,8 @@ def get_text_bboxes(img: np.ndarray,
     # Draw out statistics on average connected component size in the rescaled, binary image
     average_area = get_cc_average_size(gaussian_binary)
     logger.debug(f"Binarized Gaussian filtered image average cc area: {average_area:.2f}")
-    max_size = math.sqrt(average_area)*max_scale
-    min_size = math.sqrt(average_area)*min_scale
+    max_size = math.sqrt(average_area)*config.max_scale
+    min_size = math.sqrt(average_area)*config.min_scale
 
     # Create a mask based on the connected components's non zero values, filtered by size
     mask = form_mask(gaussian_binary, max_size, min_size)
@@ -200,7 +196,6 @@ def get_text_bboxes(img: np.ndarray,
     final_components = get_connected_components(text_only)
     bboxes = components_to_bboxes(final_components)
     final_bboxes = filter_bbox_size(bboxes, config.min_bbox_area)
-    print(final_bboxes)
     return final_bboxes
 
 
@@ -240,12 +235,12 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     mask = np.zeros((img.shape[0]+2, img.shape[1]+2), dtype=np.uint8)
     for left, top, width, height in bboxes:
         center = left+width//2, top+height//2
-        *_, mask, _ = cv2.floodFill(img, mask, center, 125)
+        cv2.floodFill(img, mask, center, 125)
 
     # Remove little imperfections in the mask.
     mask = 255*mask
     mask = cv2.dilate(mask, kernel, iterations=2)
-    mask = cv2.erode(mask, kernel, iterations=2)
+    mask = cv2.erode(mask, kernel, iterations=4)
     mask = mask[1:-1, 1:-1]  # Remove padding
 
     if display_imgs:
@@ -254,6 +249,7 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
 
     # Get the contours of the objects in the mask.
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours = list(contours)
 
     # Remove all the contours that have children or are children
     kept_contours = []
@@ -264,6 +260,10 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
             cv2.drawContours(mask_contours, contours, i, 100, -1, cv2.LINE_8, hierarchy, 0)
             cv2.drawContours(mask_contours, contours, i, 255, 2, cv2.LINE_8, hierarchy, 0)
     if display_imgs:
+        debug_contours = np.zeros_like(input_img)
+        for i in range(len(contours)):
+            cv2.drawContours(debug_contours, contours, i, 255, 2, cv2.LINE_8, hierarchy, 0)
+        show_img(debug_contours, "All contours")
         show_img(mask_contours, "Kept contours")
 
     # Remove the inside of the text boxes from the image by using the mask/contours, so that we can
