@@ -227,7 +227,7 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     #       of the bbox can pierce the bubble's boundary, leading to it being discarded later on.
     for left, top, width, height in bboxes:
         img_patch = img[top:top+height, left:left+width].copy()
-        img_patch = rlsa(img_patch, config.hsv, config.vsv)
+        img_patch = rlsa(img_patch, config.hsv//2, config.vsv)
         img_patch = cv2.bitwise_not(img_patch)
         nb_labels, img_labels = cv2.connectedComponents(img_patch)
 
