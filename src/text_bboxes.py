@@ -1,6 +1,5 @@
 import logging
 import math
-from argparse import ArgumentParser
 from pathlib import Path
 from typing import Optional
 
@@ -9,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.ndimage
 
-from config.generation_config import get_generation_config
+from config.generation_config import GenerationConfig
 from src.utils.connected_components import (
     components_to_bboxes,
     form_mask,
@@ -142,18 +141,19 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
 
 def get_text_bboxes(img: np.ndarray,
                     logger: logging.Logger,
+                    config: GenerationConfig,
                     display_images: bool = False) -> list[tuple[int, int, int, int]]:
     """Return the bounding boxes corresponding to the blocks of text on the image.
 
     Args:
         img: The image to process.
         logger: A logger, mostly used to print debug information (also shows images in debug mode).
+        config: The config with the values to use for diverse steps.
         display_images: If True, some images might get displayed.
 
     Returns:
         A list of tuples. Each tuple has 4 ints forming a bounding box: (top left, top, width, height).
     """
-    config = get_generation_config()
     height, width = img.shape[:2]
     logger.debug(f"Processing {height}x{width} image, looking for text bounding boxes.")
 
@@ -201,6 +201,7 @@ def get_text_bboxes(img: np.ndarray,
 
 def filter_bubbles(img: npt.NDArray[np.uint8],
                    bboxes: list[BBox],
+                   config: GenerationConfig,
                    display_imgs: bool = False) -> tuple[npt.NDArray[np.uint8], list[BBox]]:
     """Given an image and a list of likely text bounding boxes, try to remove some false detection.
 
@@ -211,6 +212,7 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     Args:
         img: The original image.
         bboxes: The text bouding boxes candidates.
+        config: The config with the values to use for diverse steps.
         display_imgs: Use for debug, display some intermediate results.
 
     Returns:
@@ -220,30 +222,26 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     # Threshold to get some clear boundaries for the text bubbles
     _, img = cv2.threshold(img, 252, 255, cv2.THRESH_BINARY)
 
-    # Remove the detected "text"
-    # TODO: This is not perfect: often the bottom corners of the bbox can pierce the bubble's boundary, leading it
-    #       to be discarded later on.
-    #       Maybe try to do RLSA, then remove only the biggest component
-    #       (Hopefully that'll be all the text and not the part of the bbox, issue being that RLSA is super slow.)
-    # https://docs.opencv.org/3.4/d3/dc0/group__imgproc__shape.html#gaedef8c7340499ca391d459122e51bef5
+    # Remove the detected "text" from the bubble.
+    # Note: I used rlsa and connected components instead of simply the bounding box because otherwise the bottom corners
+    #       of the bbox can pierce the bubble's boundary, leading to it being discarded later on.
     for left, top, width, height in bboxes:
         img_patch = img[top:top+height, left:left+width].copy()
-        img_patch = rlsa(img_patch, 15, 35)  # TODO: use config
+        img_patch = rlsa(img_patch, config.hsv, config.vsv)
         img_patch = cv2.bitwise_not(img_patch)
         nb_labels, img_labels = cv2.connectedComponents(img_patch)
 
         # With the opencv cc, there is always 0 for the background and then one int per cc.
         # If there is more than one cc, then keep only the biggest.
-        mask_idx = np.argmax([len(img_labels[img_labels == i]) for i in range(1, nb_labels)]) + 1
-        img[top:top+height, left:left+width] = np.where(img_labels != mask_idx, img[top:top+height, left:left+width], 255)
-
+        idx = np.argmax([len(img_labels[img_labels == i]) for i in range(1, nb_labels)]) + 1
+        img[top:top+height, left:left+width] = np.where(img_labels != idx, img[top:top+height, left:left+width], 255)
 
     # There's some noise around where the text was, try to remove a bit of it without creating holes in the border
     kernel = np.ones((3, 3), np.uint8)
     img = cv2.dilate(img, kernel, iterations=1)
     img = cv2.erode(img, kernel, iterations=1)
-    if display_imgs:
-        show_img(img, "Cleaned image")
+    # if display_imgs:
+    #     show_img(img, "Cleaned image")
 
     # Floodfill each potential bubble and get the resulting mask.
     mask = np.zeros((img.shape[0]+2, img.shape[1]+2), dtype=np.uint8)
@@ -259,7 +257,7 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
 
     if display_imgs:
         show_img(img, "Floodfilled image")
-        show_img(mask, "Flood mask")
+        # show_img(mask, "Flood mask")
 
     # Get the contours of the objects in the mask.
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -277,12 +275,18 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
         debug_contours = np.zeros_like(input_img)
         for i in range(len(contours)):
             cv2.drawContours(debug_contours, contours, i, 255, 2, cv2.LINE_8, hierarchy, 0)
-        show_img(debug_contours, "All contours")
+        # show_img(debug_contours, "All contours")
         show_img(mask_contours, "Kept contours")
 
     # Match each kept contour to its text bbox. Then progressively enlarge the bbox until it fits the bubble.
     # Note: I could start from the contour's centroid instead (easy to get with the moments), but that would likely
     #       result in more square-ish bboxes (i.e. worse fit to the bubble).
+
+    # Match each kept contour to its text bbox. Then progressively enlarge the bbox until it fits the bubble.
+    # Note: I could start from the contour's centroid instead (easy to get with the moments), but that would likely
+    #       result in more square-ish bboxes (i.e. worse fit to the bubble).
+    # Some small, garbage contours do not get matched with a bbox so some of the contours need to get removed.
+    matched_contours: list[npt.NDArray[np.int32]] = []
     adjusted_text_bboxes: list[BBox] = []
     for contour in kept_contours:
         x, y, w, h = cv2.boundingRect(contour)
@@ -306,6 +310,7 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
                     if (mask_contours[top+height, left:left+width] == 100).all():
                         height += 1
                 adjusted_text_bboxes.append(BBox(left, top, width, height))
+                matched_contours.append(contour)
 
     # Filter by area again. With a bigger value than for just the text box.
     # The idea is that even for a small text box (one or two charaters), the bubble is usually pretty big, and therefore
@@ -313,21 +318,19 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     # Whereas a small non text bbox will probably not expand much (an eye for example).
     final_text_bboxes: list[BBox] = []
     final_contours = []
-    for bbox, contour in zip(adjusted_text_bboxes, kept_contours):
-        if bbox.width * bbox.height > 3000:  # TODO: config, 3 times base value
+    for bbox, contour in zip(adjusted_text_bboxes, matched_contours):
+        if bbox.width * bbox.height > 3*config.min_bbox_area:
             final_text_bboxes.append(bbox)
             final_contours.append(contour)
 
-    # Remove the inside of the text boxes from the image by using the mask/contours, so that we can
-    # put anything there easily later.
+    # Remove the inside of the bubbles from the image by using the contours, so that we can put anything there later.
+    # Note: A contour can match multiple bounding boxes, therefore there might be duplicate contoursin final_contours.
+    #         --> For example when two bubbles are "fused" (see blackjack ni yoroshiku vol1 page30 for an example).
+    #       OpenCV's drawContours function does not handle duplicates when filling countours, hence the for loop.
     final_mask = np.zeros_like(input_img)
-    cv2.drawContours(final_mask, final_contours, -1, 255, -1, cv2.LINE_8)
+    for i in range(len(final_contours)):
+        cv2.drawContours(final_mask, final_contours, i, 255, -1, cv2.LINE_8)
     cleaned_img = np.where(final_mask == 255, 255, input_img)
-    # cleaned_img = input_img
-    # for left, top, width, height in final_text_bboxes:
-    #     cleaned_img[top:top+height, left:left+width] = 255
-    # if display_imgs:
-    #     show_img(cleaned_img, "Cleaned image")
 
     if display_imgs:
         bbox_img = cleaned_img.copy()
@@ -341,6 +344,9 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
 
 
 def main():
+    from argparse import ArgumentParser
+    from config.generation_config import get_generation_config
+
     parser = ArgumentParser(description=("Script to get bboxes of text-like areas on a manga page. "
                                          "Run with 'python -m src.text_bboxes <path>'."))
     parser.add_argument("img_path", type=Path, help="Path to the image.")
@@ -355,9 +361,10 @@ def main():
     logger = create_logger("Manga cleaner", verbose_level=verbose_level)
 
     img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+    config = get_generation_config()
 
-    bboxes = get_text_bboxes(img, logger, display_images=display_images)
-    cleaned_img, final_text_bboxes = filter_bubbles(img, bboxes, display_images)
+    bboxes = get_text_bboxes(img, logger, config, display_images=display_images)
+    cleaned_img, final_text_bboxes = filter_bubbles(img, bboxes, config, display_images)
 
     for bbox in final_text_bboxes:
         cleaned_img = cv2.rectangle(cleaned_img, (bbox.left, bbox.top), (bbox.left+bbox.width, bbox.top+bbox[3]), 0, 5)
