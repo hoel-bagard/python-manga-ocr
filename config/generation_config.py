@@ -8,7 +8,7 @@ class GenerationConfig:
 
     # The min and max scales are used to filter out components in the get_text_bboxes function.
     min_scale: float = 0.15  # Making this bigger risks making some "." filtered out, be careful.
-    max_scale: float = 4.
+    max_scale: float = 6.
 
     # At the end of the text detection based on connected components part,
     # all the bounding boxes whose area is inferior to this threshold are discarded

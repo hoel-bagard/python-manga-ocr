@@ -10,6 +10,8 @@ import scipy.ndimage
 from rlsa import rlsa
 
 from config.generation_config import GenerationConfig
+from src.torch_utils.utils.imgs_misc import show_img
+from src.torch_utils.utils.misc import clean_print
 from src.utils.connected_components import (
     components_to_bboxes,
     form_mask,
@@ -17,7 +19,6 @@ from src.utils.connected_components import (
     get_connected_components
 )
 from src.utils.logger import create_logger
-from src.utils.misc import show_img
 from src.utils.my_types import BBox
 
 
@@ -142,7 +143,7 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
 def get_text_bboxes(img: np.ndarray,
                     logger: logging.Logger,
                     config: GenerationConfig,
-                    display_images: bool = False) -> list[tuple[int, int, int, int]]:
+                    display_images: bool = False) -> list[BBox]:
     """Return the bounding boxes corresponding to the blocks of text on the image.
 
     Args:
@@ -263,20 +264,21 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     contours = list(contours)
 
-    # Remove all the contours that have children or are children
+    # Remove all the contours that have children (i.e. child != -1) or are children (i.e. hierarchy_lvl != -1)
     kept_contours = []
     mask_contours = np.zeros_like(input_img)
-    for i, (*_, child, hierarchy_lvl) in enumerate(hierarchy[0]):
-        if child == -1 and hierarchy_lvl == -1:
-            kept_contours.append(contours[i])
-            cv2.drawContours(mask_contours, contours, i, 100, -1, cv2.LINE_8, hierarchy, 0)
-            cv2.drawContours(mask_contours, contours, i, 255, 2, cv2.LINE_8, hierarchy, 0)
-    if display_imgs:
-        debug_contours = np.zeros_like(input_img)
-        for i in range(len(contours)):
-            cv2.drawContours(debug_contours, contours, i, 255, 2, cv2.LINE_8, hierarchy, 0)
-        # show_img(debug_contours, "All contours")
-        show_img(mask_contours, "Kept contours")
+    if hierarchy is not None:
+        for i, (*_, child, _hierarchy_lvl) in enumerate(hierarchy[0]):
+            if child == -1:  # and hierarchy_lvl == -1:
+                kept_contours.append(contours[i])
+                cv2.drawContours(mask_contours, contours, i, 100, -1, cv2.LINE_8, hierarchy, 0)
+                cv2.drawContours(mask_contours, contours, i, 255, 2, cv2.LINE_8, hierarchy, 0)
+        if display_imgs:
+            debug_contours = np.zeros_like(input_img)
+            for i in range(len(contours)):
+                cv2.drawContours(debug_contours, contours, i, 255, 2, cv2.LINE_8, hierarchy, 0)
+            show_img(debug_contours, "All contours")
+            show_img(mask_contours, "Kept contours")
 
     # Match each kept contour to its text bbox. Then progressively enlarge the bbox until it fits the bubble.
     # Note: I could start from the contour's centroid instead (easy to get with the moments), but that would likely
@@ -350,32 +352,50 @@ def main():
     parser = ArgumentParser(description=("Script to clean the bubbles of text from manga pages and get their locations."
                                          "Run with 'python -m src.prepare_data <path>'."))
     parser.add_argument("data_path", type=Path, help="Path to the folder with the manga pages.")
+    parser.add_argument("output_dir", type=Path, help="Path to the output folder.")
     parser.add_argument("--display_images", "-d", action="store_true", help="Displays some debug images.")
     parser.add_argument("--verbose_level", "-v", choices=["debug", "info", "error"], default="info", type=str,
                         help="Logger level.")
     args = parser.parse_args()
 
     data_path: Path = args.data_path
+    output_dir: Path = args.output_dir
     display_images: bool = args.display_images
     verbose_level: str = args.verbose_level
     logger = create_logger("Manga cleaner", verbose_level=verbose_level)
 
     exts = [".jpg", ".png", ".bmp", ".ppm"]
-    img_paths = list([p for p in data_path.rglob("*") if p.suffix in exts])
+    if data_path.suffix in exts:  # Allows to give a single image as argument.
+        img_paths = [data_path]
+    else:
+        img_paths = list([p for p in data_path.rglob("*") if p.suffix in exts])
     nb_imgs = len(img_paths)
 
     for i, img_path in enumerate(img_paths, start=1):
-        # clean_print(f"Processing image {img_path.name}    ({i}/{nb_imgs})", end="\r" if i != nb_imgs else "\n")
+        clean_print(f"Processing image {img_path.name}    ({i}/{nb_imgs})", end="\r" if i != nb_imgs else "\n")
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         config = get_generation_config()
 
         bboxes = get_text_bboxes(img, logger, config, display_images=display_images)
-        cleaned_img, final_text_bboxes = filter_bubbles(img, bboxes, config, display_images)
+        cleaned_img, final_text_bboxes = filter_bubbles(img, bboxes, config,
+                                                        display_images and verbose_level == "debug")
 
         if display_images:
             for bbox in final_text_bboxes:
-                cleaned_img = cv2.rectangle(cleaned_img, (bbox.left, bbox.top), (bbox.left+bbox.width, bbox.top+bbox[3]), 0, 5)
+                cleaned_img = cv2.rectangle(cleaned_img,
+                                            (bbox.left, bbox.top),
+                                            (bbox.left+bbox.width, bbox.top+bbox.height),
+                                            0, 5)
             show_img(cleaned_img, f"Result for img {img_path}")
+
+        try:
+            rel_path = img_path.parent.relative_to(data_path)
+            output_path = output_dir / rel_path / (img_path.stem + ".jpg")
+            output_path.parent.mkdir(exist_ok=True, parents=True)
+            logging.debug(f"Saving cleaned image at {output_path}")
+            cv2.imwrite(str(output_path), cleaned_img)
+        except ValueError:
+            logger.error("Could no save result")
 
 
 if __name__ == "__main__":
