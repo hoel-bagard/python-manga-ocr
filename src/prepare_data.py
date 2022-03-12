@@ -220,6 +220,7 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
         The list of kept (and expanded) bounding boxes, along with the image with the bubbles' inside removed.
     """
     input_img = img.copy()
+    img_height, img_width = img.shape
     # Threshold to get some clear boundaries for the text bubbles
     _, img = cv2.threshold(img, 252, 255, cv2.THRESH_BINARY)
 
@@ -234,8 +235,11 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
 
         # With the opencv cc, there is always 0 for the background and then one int per cc.
         # If there is more than one cc, then keep only the biggest.
-        idx = np.argmax([len(img_labels[img_labels == i]) for i in range(1, nb_labels)]) + 1
-        img[top:top+height, left:left+width] = np.where(img_labels != idx, img[top:top+height, left:left+width], 255)
+        if nb_labels > 1:
+            idx = np.argmax([len(img_labels[img_labels == i]) for i in range(1, nb_labels)]) + 1
+            img[top:top+height, left:left+width] = np.where(img_labels != idx,
+                                                            img[top:top+height, left:left+width],
+                                                            255)
 
     # There's some noise around where the text was, try to remove a bit of it without creating holes in the border
     kernel = np.ones((3, 3), np.uint8)
@@ -297,7 +301,8 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
             # If the center of a text bbox is within the bounding rect of a contour, then we consider that they match.
             if x <= center_x and center_x <= x+w and y <= center_y and center_y <= y+h:
                 prev_bbox = (0, 0, 0, 0)
-                while prev_bbox != (left, top, width, height):
+                while (prev_bbox != (left, top, width, height)
+                       and left > 0 and top > 0 and left+width < img_width and top+height < img_height):
                     prev_bbox = (left, top, width, height)
                     # Move left line
                     if (mask_contours[top:top+height, left] == 100).all():
@@ -313,6 +318,8 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
                         height += 1
                 adjusted_text_bboxes.append(BBox(left, top, width, height))
                 matched_contours.append(contour)
+
+    # TODO: Check if bboxes overlap
 
     # Filter by area again. With a bigger value than for just the text box.
     # The idea is that even for a small text box (one or two charaters), the bubble is usually pretty big, and therefore
@@ -373,6 +380,7 @@ def main():
 
     for i, img_path in enumerate(img_paths, start=1):
         clean_print(f"Processing image {img_path.name}    ({i}/{nb_imgs})", end="\r" if i != nb_imgs else "\n")
+        logger.debug(f"Processing image {img_path.name}    ({i}/{nb_imgs})")
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         config = get_generation_config()
 
@@ -380,13 +388,15 @@ def main():
         cleaned_img, final_text_bboxes = filter_bubbles(img, bboxes, config,
                                                         display_images and verbose_level == "debug")
 
-        if display_images:
+        if display_images or verbose_level == "debug":
+            img_with_bboxes = cleaned_img.copy()
             for bbox in final_text_bboxes:
-                cleaned_img = cv2.rectangle(cleaned_img,
-                                            (bbox.left, bbox.top),
-                                            (bbox.left+bbox.width, bbox.top+bbox.height),
-                                            0, 5)
-            show_img(cleaned_img, f"Result for img {img_path}")
+                img_with_bboxes = cv2.rectangle(img_with_bboxes,
+                                                (bbox.left, bbox.top),
+                                                (bbox.left+bbox.width, bbox.top+bbox.height),
+                                                0, 5)
+        if display_images:
+            show_img(img_with_bboxes, f"Result for img {img_path}")
 
         try:
             rel_path = img_path.parent.relative_to(data_path)
@@ -394,8 +404,11 @@ def main():
             output_path.parent.mkdir(exist_ok=True, parents=True)
             logging.debug(f"Saving cleaned image at {output_path}")
             cv2.imwrite(str(output_path), cleaned_img)
+            if verbose_level == "debug":
+                cv2.imwrite(str(output_path.with_stem(output_path.stem + "_debug")), img_with_bboxes)
         except ValueError:
             logger.error("Could no save result")
+
 
 
 if __name__ == "__main__":
