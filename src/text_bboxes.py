@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 import scipy.ndimage
+from rlsa import rlsa
 
 from config.generation_config import GenerationConfig
 from src.utils.connected_components import (
@@ -18,7 +19,6 @@ from src.utils.connected_components import (
 from src.utils.logger import create_logger
 from src.utils.misc import show_img
 from src.utils.my_types import BBox
-from src.utils.rlsa import rlsa
 
 
 def filter_bbox_size(bboxes: list[BBox], min_area: int = 5000) -> list[BBox]:
@@ -114,7 +114,7 @@ def cleaned_to_text_mask(cleaned_img: np.ndarray,
     height, width = cleaned_img.shape[:2]
     logger.debug(f"Applying run length smoothing with vertical threshold {vsv:.2f} and horizontal threshold {hsv:.2f}")
 
-    rlsa_result = rlsa(cleaned_img, hsv, vsv)
+    rlsa_result = rlsa(cleaned_img, hsv, vsv, hsv//10)
     components = get_connected_components(cv2.bitwise_not(rlsa_result))
 
     text = np.zeros((height, width), np.uint8)
@@ -227,7 +227,7 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     #       of the bbox can pierce the bubble's boundary, leading to it being discarded later on.
     for left, top, width, height in bboxes:
         img_patch = img[top:top+height, left:left+width].copy()
-        img_patch = rlsa(img_patch, config.hsv//2, config.vsv)
+        img_patch = rlsa(img_patch, config.hsv//2, config.vsv, config.hsv//4)
         img_patch = cv2.bitwise_not(img_patch)
         nb_labels, img_labels = cv2.connectedComponents(img_patch)
 
