@@ -347,28 +347,35 @@ def main():
     from argparse import ArgumentParser
     from config.generation_config import get_generation_config
 
-    parser = ArgumentParser(description=("Script to get bboxes of text-like areas on a manga page. "
-                                         "Run with 'python -m src.text_bboxes <path>'."))
-    parser.add_argument("img_path", type=Path, help="Path to the image.")
+    parser = ArgumentParser(description=("Script to clean the bubbles of text from manga pages and get their locations."
+                                         "Run with 'python -m src.prepare_data <path>'."))
+    parser.add_argument("data_path", type=Path, help="Path to the folder with the manga pages.")
     parser.add_argument("--display_images", "-d", action="store_true", help="Displays some debug images.")
     parser.add_argument("--verbose_level", "-v", choices=["debug", "info", "error"], default="info", type=str,
                         help="Logger level.")
     args = parser.parse_args()
 
-    img_path: Path = args.img_path
+    data_path: Path = args.data_path
     display_images: bool = args.display_images
     verbose_level: str = args.verbose_level
     logger = create_logger("Manga cleaner", verbose_level=verbose_level)
 
-    img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
-    config = get_generation_config()
+    exts = [".jpg", ".png", ".bmp", ".ppm"]
+    img_paths = list([p for p in data_path.rglob("*") if p.suffix in exts])
+    nb_imgs = len(img_paths)
 
-    bboxes = get_text_bboxes(img, logger, config, display_images=display_images)
-    cleaned_img, final_text_bboxes = filter_bubbles(img, bboxes, config, display_images)
+    for i, img_path in enumerate(img_paths, start=1):
+        # clean_print(f"Processing image {img_path.name}    ({i}/{nb_imgs})", end="\r" if i != nb_imgs else "\n")
+        img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+        config = get_generation_config()
 
-    for bbox in final_text_bboxes:
-        cleaned_img = cv2.rectangle(cleaned_img, (bbox.left, bbox.top), (bbox.left+bbox.width, bbox.top+bbox[3]), 0, 5)
-    show_img(cleaned_img, "Result")
+        bboxes = get_text_bboxes(img, logger, config, display_images=display_images)
+        cleaned_img, final_text_bboxes = filter_bubbles(img, bboxes, config, display_images)
+
+        if display_images:
+            for bbox in final_text_bboxes:
+                cleaned_img = cv2.rectangle(cleaned_img, (bbox.left, bbox.top), (bbox.left+bbox.width, bbox.top+bbox[3]), 0, 5)
+            show_img(cleaned_img, f"Result for img {img_path}")
 
 
 if __name__ == "__main__":
