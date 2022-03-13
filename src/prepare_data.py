@@ -222,14 +222,14 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     input_img = img.copy()
     img_height, img_width = img.shape
     # Threshold to get some clear boundaries for the text bubbles
-    _, img = cv2.threshold(img, 252, 255, cv2.THRESH_BINARY)
+    _, img = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)
 
     # Remove the detected "text" from the bubble.
     # Note: I used rlsa and connected components instead of simply the bounding box because otherwise the bottom corners
     #       of the bbox can pierce the bubble's boundary, leading to it being discarded later on.
     for left, top, width, height in bboxes:
         img_patch = img[top:top+height, left:left+width].copy()
-        img_patch = rlsa(img_patch, config.hsv//2, config.vsv, config.hsv//4)
+        img_patch = rlsa(img_patch, int(config.hsv/1.3), config.vsv, 0)
         img_patch = cv2.bitwise_not(img_patch)
         nb_labels, img_labels = cv2.connectedComponents(img_patch)
 
