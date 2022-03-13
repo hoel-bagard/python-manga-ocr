@@ -301,6 +301,8 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
             # If the center of a text bbox is within the bounding rect of a contour, then we consider that they match.
             if x <= center_x and center_x <= x+w and y <= center_y and center_y <= y+h:
                 prev_bbox = (0, 0, 0, 0)
+                # Sometimes the original BB is a bit too big (especially at the bottom, since the container is a bubble)
+                height, width = int(0.8*height), int(0.8*width)
                 while (prev_bbox != (left, top, width, height)
                        and left > 0 and top > 0 and left+width < img_width and top+height < img_height):
                     prev_bbox = (left, top, width, height)
