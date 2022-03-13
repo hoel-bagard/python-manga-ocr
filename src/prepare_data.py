@@ -194,6 +194,7 @@ def get_text_bboxes(img: np.ndarray,
         debug_img[:, :, 2] = text_only
         show_img(debug_img)
 
+    # Convert to BBoxes and filter by size.
     final_components = get_connected_components(text_only)
     bboxes = components_to_bboxes(final_components)
     final_bboxes = filter_bbox_size(bboxes, config.min_bbox_area)
@@ -222,14 +223,23 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     input_img = img.copy()
     img_height, img_width = img.shape
     # Threshold to get some clear boundaries for the text bubbles
-    _, img = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)
+    # mask = cv2.medianBlur(mask, 3)
+    # blur = cv2.GaussianBlur(img, (5, 5), sigmaX=25, sigmaY=25)
+    # img = cv2.divide(img, blur, scale=255)
+    # img = cv2.fastNlMeansDenoising(img, 10, 21, 7)
+    _, img = cv2.threshold(img, 252, 255, cv2.THRESH_BINARY)
 
     # Remove the detected "text" from the bubble.
     # Note: I used rlsa and connected components instead of simply the bounding box because otherwise the bottom corners
     #       of the bbox can pierce the bubble's boundary, leading to it being discarded later on.
+    # Note 2: On some images, the noise next to letters (slightly outside the BBox), was such that I couldn't manage to
+    #         remove it with some kind of filer. The margin can be used to remove that noise. Saddly it creates holes in
+    #         the bubbles.
+    # margin = 0
     for left, top, width, height in bboxes:
+        # left, top, width, height = left-margin//2, top-margin//2, width+margin, height+margin
         img_patch = img[top:top+height, left:left+width].copy()
-        img_patch = rlsa(img_patch, int(config.hsv/1.3), config.vsv, 0)
+        img_patch = rlsa(img_patch, int(.5*config.hsv), int(.5*config.vsv), 0)
         img_patch = cv2.bitwise_not(img_patch)
         nb_labels, img_labels = cv2.connectedComponents(img_patch)
 
@@ -240,30 +250,36 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
             img[top:top+height, left:left+width] = np.where(img_labels != idx,
                                                             img[top:top+height, left:left+width],
                                                             255)
+    if display_imgs:
+        show_img(img, "Cleaned image")
 
-    # TODO: remove
     # There's some noise around where the text was, try to remove a bit of it without creating holes in the border
-    # kernel = np.ones((3, 3), np.uint8)
-    # img = cv2.dilate(img, kernel, iterations=1)
-    # img = cv2.erode(img, kernel, iterations=1)
-    # if display_imgs:
-    #     show_img(img, "Cleaned image")
+    kernel = np.ones((3, 3), np.uint8)
+    img = cv2.dilate(img, kernel, iterations=1)
+    img = cv2.erode(img, kernel, iterations=1)
 
     # Floodfill each potential bubble and get the resulting mask.
     mask = np.zeros((img.shape[0]+2, img.shape[1]+2), dtype=np.uint8)
     for left, top, width, height in bboxes:
         center = left+width//2, top+height//2
         cv2.floodFill(img, mask, center, 125)
+    mask = 255*mask
     mask = mask[1:-1, 1:-1]  # Remove padding
 
-    # Remove little imperfections in the mask.  TODO: remove
-    # mask = 255*mask
-    # mask = cv2.dilate(mask, kernel, iterations=2)
-    # mask = cv2.erode(mask, kernel, iterations=4)
+    # Remove all groups of pixels whose contour area is small. (Noise that's too big to be removed with dilatation)
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours = list(contours)
+    for i in range(len(contours)):
+        if cv2.contourArea(contours[i]) < 350:
+            cv2.drawContours(mask, contours, i, 255, -1, cv2.LINE_8)
+
+    # Remove little imperfections in the mask.
+    mask = cv2.dilate(mask, kernel, iterations=2)  # This often creates holes in the bubbles...
+    mask = cv2.erode(mask, kernel, iterations=4)
 
     if display_imgs:
         show_img(img, "Floodfilled image")
-        # show_img(mask, "Flood mask")
+        show_img(mask, "Flood mask")
 
     # Get the contours of the objects in the mask.
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -288,10 +304,6 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     # Match each kept contour to its text bbox. Then progressively enlarge the bbox until it fits the bubble.
     # Note: I could start from the contour's centroid instead (easy to get with the moments), but that would likely
     #       result in more square-ish bboxes (i.e. worse fit to the bubble).
-
-    # Match each kept contour to its text bbox. Then progressively enlarge the bbox until it fits the bubble.
-    # Note: I could start from the contour's centroid instead (easy to get with the moments), but that would likely
-    #       result in more square-ish bboxes (i.e. worse fit to the bubble).
     # Some small, garbage contours do not get matched with a bbox so some of the contours need to get removed.
     matched_contours: list[npt.NDArray[np.int32]] = []
     adjusted_text_bboxes: list[BBox] = []
@@ -310,12 +322,14 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
                     # Move left line
                     if (mask_contours[top:top+height, left] == 100).all():
                         left -= 1
+                        width += 1  # Needed to keep right line where it is.
                     # Move right line
                     if (mask_contours[top:top+height, left+width] == 100).all():
                         width += 1
                     # Move top line
                     if (mask_contours[top, left:left+width] == 100).all():
                         top -= 1
+                        height += 1  # Need to keep bottom line where it is.
                     # Move bottom line
                     if (mask_contours[top+height, left:left+width] == 100).all():
                         height += 1
@@ -331,7 +345,7 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     final_text_bboxes: list[BBox] = []
     final_contours = []
     for bbox, contour in zip(adjusted_text_bboxes, matched_contours):
-        if bbox.width * bbox.height > 3*config.min_bbox_area:
+        if bbox.width * bbox.height > 5*config.min_bbox_area:
             final_text_bboxes.append(bbox)
             final_contours.append(contour)
 
