@@ -241,10 +241,11 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
                                                             img[top:top+height, left:left+width],
                                                             255)
 
+    # TODO: remove
     # There's some noise around where the text was, try to remove a bit of it without creating holes in the border
-    kernel = np.ones((3, 3), np.uint8)
-    img = cv2.dilate(img, kernel, iterations=1)
-    img = cv2.erode(img, kernel, iterations=1)
+    # kernel = np.ones((3, 3), np.uint8)
+    # img = cv2.dilate(img, kernel, iterations=1)
+    # img = cv2.erode(img, kernel, iterations=1)
     # if display_imgs:
     #     show_img(img, "Cleaned image")
 
@@ -253,12 +254,12 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     for left, top, width, height in bboxes:
         center = left+width//2, top+height//2
         cv2.floodFill(img, mask, center, 125)
-
-    # Remove little imperfections in the mask.
-    mask = 255*mask
-    mask = cv2.dilate(mask, kernel, iterations=2)
-    mask = cv2.erode(mask, kernel, iterations=4)
     mask = mask[1:-1, 1:-1]  # Remove padding
+
+    # Remove little imperfections in the mask.  TODO: remove
+    # mask = 255*mask
+    # mask = cv2.dilate(mask, kernel, iterations=2)
+    # mask = cv2.erode(mask, kernel, iterations=4)
 
     if display_imgs:
         show_img(img, "Floodfilled image")
