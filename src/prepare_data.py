@@ -19,6 +19,7 @@ from src.utils.connected_components import (
     get_connected_components
 )
 from src.utils.logger import create_logger
+from src.utils.nms import nms
 from src.utils.my_types import BBox
 
 
@@ -43,7 +44,7 @@ def get_canny_hulls_mask(img: np.ndarray, mask: Optional[np.ndarray] = None) -> 
     """
     edges = cv2.Canny(img, 128, 255, apertureSize=3)
     mask = mask*edges if mask is not None else edges
-    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     hulls_mask = np.zeros(img.shape, np.uint8)
     for contour in contours:
@@ -312,7 +313,7 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
         for left, top, width, height in bboxes:
             center_x, center_y = left+width//2, top+height//2
             # If the center of a text bbox is within the bounding rect of a contour, then we consider that they match.
-            if x <= center_x and center_x <= x+w and y <= center_y and center_y <= y+h:
+            if x <= center_x <= x+w and y <= center_y <= y+h:
                 prev_bbox = (0, 0, 0, 0)
                 # Sometimes the original BB is a bit too big (especially at the bottom, since the container is a bubble)
                 height, width = int(0.8*height), int(0.8*width)
@@ -336,17 +337,15 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
                 adjusted_text_bboxes.append(BBox(left, top, width, height))
                 matched_contours.append(contour)
 
-    # TODO: Check if bboxes overlap
-
     # Filter by area again. With a bigger value than for just the text box.
     # The idea is that even for a small text box (one or two charaters), the bubble is usually pretty big, and therefore
     # the expanded bbox should have a bigger area.
     # Whereas a small non text bbox will probably not expand much (an eye for example).
-    final_text_bboxes: list[BBox] = []
+    size_filtered_bboxes: list[BBox] = []
     final_contours = []
     for bbox, contour in zip(adjusted_text_bboxes, matched_contours):
-        if bbox.width * bbox.height > 5*config.min_bbox_area:
-            final_text_bboxes.append(bbox)
+        if bbox.width * bbox.height > 5*config.min_bbox_area:  # TODO: Separate variable in config
+            size_filtered_bboxes.append(bbox)
             final_contours.append(contour)
 
     # Remove the inside of the bubbles from the image by using the contours, so that we can put anything there later.
@@ -357,6 +356,9 @@ def filter_bubbles(img: npt.NDArray[np.uint8],
     for i in range(len(final_contours)):
         cv2.drawContours(final_mask, final_contours, i, 255, -1, cv2.LINE_8)
     cleaned_img = np.where(final_mask == 255, 255, input_img)
+
+    # NMS to remove overlapping bboxes.
+    final_text_bboxes = nms(size_filtered_bboxes) if len(size_filtered_bboxes) > 1 else size_filtered_bboxes
 
     if display_imgs:
         bbox_img = cleaned_img.copy()
@@ -392,7 +394,7 @@ def main():
     if data_path.suffix in exts:  # Allows to give a single image as argument.
         img_paths = [data_path]
     else:
-        img_paths = list([p for p in data_path.rglob("*") if p.suffix in exts])
+        img_paths = [p for p in data_path.rglob("*") if p.suffix in exts]
     nb_imgs = len(img_paths)
 
     for i, img_path in enumerate(img_paths, start=1):
@@ -425,7 +427,6 @@ def main():
                 cv2.imwrite(str(output_path.with_stem(output_path.stem + "_debug")), img_with_bboxes)
         except ValueError:
             logger.error("Could no save result")
-
 
 
 if __name__ == "__main__":

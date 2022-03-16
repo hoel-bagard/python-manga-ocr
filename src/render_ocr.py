@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from src.my_types import OCRData
+from src.utils.my_types import OCRData
 
 
 def render_detected_tesseract(img: np.ndarray,
