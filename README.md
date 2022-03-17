@@ -1,8 +1,12 @@
 # Python Manga OCR
 
 ## Get data
+### Manga
 You can get the ブラックジャックによろしく manga [here](https://densho810.com/free/).\
 Unzip them and use the `utils/pdf_to_imgs.py` script to get images (you need to install dependencies for that).
+
+### Text
+For now I am using works available on the [青空文庫](https://www.aozora.gr.jp/) website.  (look for 著作権の切れている作品)
 
 ## Installation
 ### Install the requirements

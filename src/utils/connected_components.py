@@ -63,7 +63,7 @@ def get_connected_components(img: np.ndarray) -> list[tuple[slice, slice]]:
     # structure = scipy.ndimage.morphology.generate_binary_structure(2, 2)
     # label, num_features = scipy.ndimage.measurements.label(image, structure=structure)
 
-    label, num_features = scipy.ndimage.measurements.label(img)
+    label, _num_features = scipy.ndimage.measurements.label(img)
     objects_slices = scipy.ndimage.measurements.find_objects(label)
     return objects_slices
 

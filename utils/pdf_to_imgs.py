@@ -1,4 +1,5 @@
 import shutil
+import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -7,7 +8,7 @@ try:
 except ModuleNotFoundError:
     print("To use this script you need to pip install 'pdf2image'.")
     print("Note: you might need to install other dependencies, check the package's github page.")
-    exit()
+    sys.exit()
 
 
 def name_generator(padding=4):
