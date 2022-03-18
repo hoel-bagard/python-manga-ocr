@@ -25,7 +25,7 @@ def nms(bboxes: list[BBox], threshold: float = 0.) -> list[BBox]:
     while len(bboxes) > 0:
         # Keep biggest element and remove it from the input array.
         current_bbox, current_area = bboxes[-1], areas[:-1]
-        kept_bboxes.append(BBox(*current_bbox))
+        kept_bboxes.append(BBox(*(int(v) for v in current_bbox)))
         bboxes, areas = bboxes[:-1], areas[:-1]
 
         # Find the coordinates of the intersection boxes

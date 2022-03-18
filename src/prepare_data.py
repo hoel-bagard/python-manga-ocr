@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 from pathlib import Path
@@ -11,6 +12,7 @@ from rlsa import rlsa
 
 from config.generation_config import GenerationConfig
 from src.torch_utils.utils.imgs_misc import show_img
+from src.torch_utils.utils.logger import create_logger
 from src.torch_utils.utils.misc import clean_print
 from src.utils.connected_components import (
     components_to_bboxes,
@@ -18,9 +20,8 @@ from src.utils.connected_components import (
     get_cc_average_size,
     get_connected_components
 )
-from src.utils.logger import create_logger
-from src.utils.nms import nms
 from src.utils.my_types import BBox
+from src.utils.nms import nms
 
 
 def filter_bbox_size(bboxes: list[BBox], min_area: int = 5000) -> list[BBox]:
@@ -425,6 +426,10 @@ def main():
             cv2.imwrite(str(output_path), cleaned_img)
             if verbose_level == "debug":
                 cv2.imwrite(str(output_path.with_stem(output_path.stem + "_debug")), img_with_bboxes)
+
+            json_labels = {"bboxes": [[*bbox] for bbox in final_text_bboxes]}
+            with open(output_path.with_suffix(".json"), "w", encoding="utf-8") as json_file:
+                json.dump(json_labels, json_file)
         except ValueError:
             logger.error("Could no save result")
 
