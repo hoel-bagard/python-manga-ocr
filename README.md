@@ -6,7 +6,10 @@ You can get the ブラックジャックによろしく manga [here](https://den
 Unzip them and use the `utils/pdf_to_imgs.py` script to get images (you need to install dependencies for that).
 
 ### Text
-For now I am using works available on the [青空文庫](https://www.aozora.gr.jp/) website.  (look for 著作権の切れている作品)
+For now I am using works available on the [青空文庫](https://www.aozora.gr.jp/) website.  (look for 著作権の切れている作品)\
+There is no need to need to write a scrapper, as the files can be downloaded from [their github](https://github.com/aozorahack/aozorabunko_text).
+
+Another ressource to use in the future: https://data.statmt.org/cc-100/
 
 ## Installation
 ### Install the requirements
